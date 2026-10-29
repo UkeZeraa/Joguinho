@@ -143,7 +143,7 @@ const Voice = (() => {
     militante_olha: { who: 'militante', text: 'Olha ele ali! Pega!' },
     militante_anistia: { who: 'militante', text: 'Sem anistia!' },
     pf_parado: { who: 'pf', text: 'Polícia Federal! Parado aí!' },
-    pf_mandado: { who: 'pf', text: 'Temos um mandado!' },
+    pf_mandado: { who: 'pf', text: 'Temos um mandado para você, Flávio Bolsonaro!' },
     cf_iguais: { who: 'cf', text: 'Todos são iguais perante a lei!' },
     cf_acima: { who: 'cf', text: 'Ninguém está acima da Constituição!' },
   };
