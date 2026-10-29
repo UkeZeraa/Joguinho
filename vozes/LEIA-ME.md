@@ -14,6 +14,12 @@ automaticamente no lugar da voz sintetizada, para todo mundo que abrir o link.
 | `flavio_ninguem.mp3` | Flávio | Ninguém me pega! |
 | `flavio_fui.mp3` | Flávio | Fui! Tchau, Brasil! (ao embarcar) |
 | `flavio_ai.mp3` | Flávio | Ai! (quando leva dano) |
+| `militante_olha.mp3` | Militante | Olha ele ali! Pega! |
+| `militante_anistia.mp3` | Militante | Sem anistia! |
+| `pf_parado.mp3` | Polícia Federal | Polícia Federal! Parado aí! |
+| `pf_mandado.mp3` | Polícia Federal | Temos um mandado! |
+| `cf_iguais.mp3` | Constituição | Todos são iguais perante a lei! |
+| `cf_acima.mp3` | Constituição | Ninguém está acima da Constituição! |
 
 Dicas:
 - Áudios curtos (1 a 3 segundos) funcionam melhor.

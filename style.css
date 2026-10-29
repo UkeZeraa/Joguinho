@@ -103,6 +103,9 @@ h2 { font-size: 18px; color: #ffd800; text-shadow: 3px 3px 0 #000; }
   background: #1d2b53; border: 3px solid #fff; padding: 8px 10px; text-align: left;
 }
 .sound-row.lula { border-color: #ff5050; }
+.sound-row.militante { border-color: #ff8a3a; }
+.sound-row.pf { border-color: #9a9aa8; }
+.sound-row.cf { border-color: #3cd05a; }
 .sound-label { font-size: 8px; line-height: 1.7; flex: 1 1 200px; }
 .sound-label small { display: block; color: #9ab; font-size: 7px; }
 .sound-btns { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -138,6 +138,49 @@ const AGENT_TORSO = PX([
 ]);
 const AGENT_PAL = { k: '#1c1c22', y: '#f2c200', s: '#c98a62', K: '#050505', p: '#222c3a', b: '#000000' };
 
+// ---------- Militante (boné e camiseta vermelha, carrega uma bandeira) ----------
+const MILITANTE_HEAD = PX([
+  '....ccccccc.....',
+  '...cccccccccc...',
+  '..cccccccccccccc',
+  '..hhsssssssss...',
+  '..hssesssess....',
+  '..hsssssssssss..',
+  '...sssssssssss..',
+  '...sssssskkkss..',
+  '....ssssskksss..',
+  '......ssss......',
+]);
+const MILITANTE_TORSO = PX([
+  '....rrrrrrrrr...',
+  '...rrrrrrwrrrr..',
+  '...rrrrrwwwrrr..',
+  '...rrrrrrwrrrr..',
+  '...rrrrrwrwrrr..',
+  '...srrrrrrrrrs..',
+]);
+const MILITANTE_PAL = { c: '#c81414', h: '#2a1a10', s: '#b97a52', e: '#111111', k: '#5a1a10',
+  r: '#e02020', w: '#ffffff', p: '#2a3a6a', b: '#4a2a10' };
+
+// ---------- Constituição (livro voador bravo) ----------
+const BOOK = PX([
+  '..gggggggggggg..',
+  '.gGGGGGGGGGGGGg.',
+  '.gGyyyyyyyyyyGg.',
+  '.gGyGGGGGGGGyGg.',
+  '.gGKKGGGGKKGyGg.',
+  '.gGyKwGGGKwGyGg.',
+  '.gGyGGGGGGGGyGg.',
+  '.gGyGGKKKKGGyGg.',
+  '.gGyGGGGGGGGyGg.',
+  '.gGyGyyyyyyGyGg.',
+  '.gGyyyyyyyyyyGg.',
+  '.gGGGGGGGGGGGGg.',
+  '.gwwwwwwwwwwwwg.',
+  '..gggggggggggg..',
+]);
+const BOOK_PAL = { g: '#0d4a22', G: '#1f7a3a', y: '#e0b020', K: '#111111', w: '#f4f1e4' };
+
 // ---------- Intimação (papel que anda) ----------
 const PAPER_TOP = PX([
   '...wwwwwwwww....',
@@ -292,5 +335,11 @@ const Sprites = (() => {
     lula: frame => get('l_' + frame, () => buildHuman(LULA_HEAD, LULA_TORSO, legsFor(frame), LULA_PAL).c),
     agent: frame => get('a_' + frame, () => buildHuman(AGENT_HEAD, AGENT_TORSO, legsFor(frame), AGENT_PAL).c),
     paper: i => get('p_' + (i % 2), () => buildPaper(i)),
+    militante: frame => get('m_' + frame, () => buildHuman(MILITANTE_HEAD, MILITANTE_TORSO, legsFor(frame), MILITANTE_PAL).c),
+    book: () => get('book', () => {
+      const c = canvas(16, 14);
+      drawMap(c.getContext('2d'), BOOK, BOOK_PAL, 0, 0);
+      return c;
+    }),
   };
 })();

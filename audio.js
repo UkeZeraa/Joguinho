@@ -140,7 +140,16 @@ const Voice = (() => {
     flavio_ninguem: { who: 'flavio', text: 'Ninguém me pega!' },
     flavio_fui: { who: 'flavio', text: 'Fui! Tchau, Brasil!' },
     flavio_ai: { who: 'flavio', text: 'Ai!' },
+    militante_olha: { who: 'militante', text: 'Olha ele ali! Pega!' },
+    militante_anistia: { who: 'militante', text: 'Sem anistia!' },
+    pf_parado: { who: 'pf', text: 'Polícia Federal! Parado aí!' },
+    pf_mandado: { who: 'pf', text: 'Temos um mandado!' },
+    cf_iguais: { who: 'cf', text: 'Todos são iguais perante a lei!' },
+    cf_acima: { who: 'cf', text: 'Ninguém está acima da Constituição!' },
   };
+  const WHO = { lula: 'LULA', flavio: 'FLÁVIO', militante: 'MILITANTE', pf: 'POLÍCIA FEDERAL', cf: 'CONSTITUIÇÃO' };
+  // jeito de falar de cada personagem na voz sintetizada
+  const STYLE = { lula: [0.3, 0.95], flavio: [1.6, 1.15], militante: [1.1, 1.3], pf: [0.6, 1.0], cf: [0.9, 0.8] };
   const PREFIX = 'fugaFlavio_voz_';
   const hasTTS = 'speechSynthesis' in window;
   let voices = [];
@@ -171,10 +180,12 @@ const Voice = (() => {
   // opts.onStart: chamado quando a fala começa de verdade (para mostrar o balão junto)
   // opts.interrupt: corta o que estiver tocando (ex.: "Peguei você!")
   // opts.force: toca mesmo com o som desligado (botão de ouvir na tela de vozes)
+  // opts.ifIdle: só fala se ninguém estiver falando (gritos dos inimigos)
   function play(id, opts) {
     opts = opts || {};
     if (!LINES[id]) return;
     if (Sfx.muted && !opts.force) { if (opts.onStart) opts.onStart(); return; }
+    if (opts.ifIdle && (cur || queue.length)) return;
     if (opts.interrupt || opts.force) stop();
     queue = queue.filter(q => q.id !== id);
     queue.push({ id, onStart: opts.onStart, t: Date.now() });
@@ -215,7 +226,7 @@ const Voice = (() => {
     u.lang = 'pt-BR';
     const v = ptVoice();
     if (v) u.voice = v;
-    if (line.who === 'lula') { u.pitch = 0.3; u.rate = 0.95; } else { u.pitch = 1.6; u.rate = 1.15; }
+    [u.pitch, u.rate] = STYLE[line.who] || [1, 1];
     u.onend = done;
     u.onerror = done;
     speechSynthesis.speak(u);
@@ -231,5 +242,5 @@ const Voice = (() => {
     if (hasTTS) speechSynthesis.cancel();
   }
 
-  return { LINES, play, stop, custom, setCustom, clearCustom, hasFile };
+  return { LINES, WHO, play, stop, custom, setCustom, clearCustom, hasFile };
 })();

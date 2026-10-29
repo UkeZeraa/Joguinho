@@ -10,7 +10,12 @@ antes que o Lula pegue ele... e o passaporte!
 
 - **Celular:** botões ◀ ▶ na esquerda, **PULA** na direita (segure para pular mais alto).
 - **PC:** ← → (ou A/D) para andar, **Espaço**/↑ para pular, **P** pausa, **M** liga/desliga o som.
-- Pise nas **Intimações** e nos **Agentes da PF** para tirá-los do caminho.
+- Inimigos (pise em cima deles para tirá-los do caminho):
+  - **Intimação**: papel que anda.
+  - **Militante**: camiseta vermelha e bandeira, corre rápido e dá pulinhos.
+  - **Polícia Federal**: não cai dos buracos, fica patrulhando.
+  - **Constituição**: livro voador que vem na altura da cabeça do Flávio.
+- Cada inimigo grita a sua fala quando aparece na tela.
 - Bata a cabeça nos blocos **?** para ganhar dólares. Um deles esconde o **Passaporte**,
   que te protege de um golpe (inclusive de uma agarrada do Lula!).
 - A bandeira no meio da fase é o checkpoint.

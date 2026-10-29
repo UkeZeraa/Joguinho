@@ -96,15 +96,23 @@ function tileSet(th) {
 }
 
 // ===== Geração das fases =====
+const ENEMY = {
+  paper: { w: 12, h: 15, speed: 0.5 },
+  agent: { w: 12, h: 22, speed: 0.75, lines: ['pf_parado', 'pf_mandado'] },
+  militante: { w: 12, h: 22, speed: 0.95, lines: ['militante_olha', 'militante_anistia'] },
+  book: { w: 14, h: 14, speed: 0.9, lines: ['cf_iguais', 'cf_acima'] },
+};
 function mkEnemy(type, tx, top) {
-  const h = type === 'paper' ? 15 : 22;
-  return { type, x: tx * TS + 2, y: top * TS - h, w: 12, h, vx: 0, vy: 0, dir: -1,
-    speed: type === 'paper' ? 0.5 : 0.75, onGround: false, active: false, dead: false, gone: false, anim: 0 };
+  const d = ENEMY[type];
+  // a Constituição voa na altura da cabeça do Flávio
+  const y = type === 'book' ? (top - 2) * TS - 2 : top * TS - d.h;
+  return { type, x: tx * TS + 2, y, baseY: y, w: d.w, h: d.h, vx: 0, vy: 0, dir: -1, speed: d.speed,
+    onGround: false, active: false, dead: false, gone: false, anim: 0, t: 0, hop: 60 + Math.random() * 90 };
 }
 
 function genLevel(n) {
   const rnd = mulberry32(4242 + n * 977);
-  const W = 150 + n * 40;
+  const W = 230 + n * 50;
   const tiles = new Uint8Array(W * LH);
   const groundTop = new Int16Array(W).fill(-1);
   const contents = new Map();
@@ -163,10 +171,17 @@ function genLevel(n) {
     } else if (r2 < 0.85) {
       for (let i = 1; i < len - 1; i++) coin(segStart + i, top - 2);
     }
-    if (segStart > 18 && rnd() < 0.45 + n * 0.12) {
-      const type = n > 0 && rnd() < 0.45 ? 'agent' : 'paper';
+    if (segStart > 18 && rnd() < 0.55 + n * 0.12) {
+      const r3 = rnd();
+      const type = r3 < 0.3 - n * 0.08 ? 'paper' : r3 < 0.7 - n * 0.06 ? 'militante' : 'agent';
       enemies.push(mkEnemy(type, segStart + Math.floor(len / 2) - (stairs ? 2 : 0), top));
+      if (len >= 7 && rnd() < 0.3 + n * 0.1) enemies.push(mkEnemy(rnd() < 0.5 ? 'militante' : 'paper', segStart + 1, top));
     }
+  }
+
+  // Constituições voadoras aparecem de tempos em tempos
+  for (let bx = 40; bx < endStart - 8; bx += 34 - n * 6 + Math.floor(rnd() * 8)) {
+    enemies.push(mkEnemy('book', bx, groundTop[bx] >= 0 ? groundTop[bx] : 10));
   }
 
   const planeX = (W - 19) * TS;
@@ -182,7 +197,7 @@ function genLevel(n) {
 let state = 'menu';           // menu | play | paused | dying | boarding | dialog
 let L = null, player = null, lula = null, cam = { x: 0 };
 let lives = 3, runCoins = 0, score = 0, stateT = 0, frame = 0, banner = 0;
-let checkpoint = null, deathCause = '';
+let checkpoint = null, deathCause = '', lastShout = 0;
 let parts = [], bubbles = [], speechQ = [];
 const bumps = new Map();
 let menuCam = 0;
@@ -293,13 +308,22 @@ function collideY(e) {
 
 // ===== Falas e balões =====
 // O balão aparece quando a fala começa de fato (as falas entram numa fila)
-function say(id, interrupt) {
+// ent: quem fala (para inimigos); ifIdle: só fala se ninguém estiver falando
+function say(id, interrupt, ent, ifIdle) {
   const line = Voice.LINES[id];
   if (!line) return;
-  Voice.play(id, { interrupt, onStart: () => {
+  Voice.play(id, { interrupt, ifIdle, onStart: () => {
     bubbles = bubbles.filter(b => b.who !== line.who);
-    bubbles.push({ who: line.who, text: line.text, t: 160 });
+    bubbles.push({ who: line.who, ent, text: line.text, t: 160 });
   } });
+}
+
+// inimigos gritam quando aparecem na tela (sem atropelar as outras falas)
+function enemyShout(e) {
+  const lines = ENEMY[e.type].lines;
+  if (!lines || frame - lastShout < 200 || Math.random() > 0.6) return;
+  lastShout = frame;
+  say(pick(lines), false, e, true);
 }
 const queueSay = (id, delay) => speechQ.push({ id, delay });
 
@@ -328,7 +352,7 @@ function startLevel(n) {
   player = mkPlayer(sx, L.groundTop[3] * TS - 22);
   checkpoint = { x: sx, y: player.y };
   lula = { x: sx - 130, y: player.y, w: 12, h: 22, base: 1.2 + n * 0.15, anim: 0, facing: 1, wait: 70, talk: 40 };
-  parts = []; bubbles = []; speechQ = []; bumps.clear();
+  parts = []; bubbles = []; speechQ = []; bumps.clear(); lastShout = 0;
   Voice.stop();
   cam.x = 0; frame = 0; banner = 160;
   state = 'play';
@@ -465,13 +489,28 @@ function updateEnemies() {
       if (e.deadT <= 0) e.gone = true;
       continue;
     }
-    if (!e.active) { if (e.x < cam.x + VW + 24) e.active = true; else continue; }
+    if (!e.active) {
+      if (e.x < cam.x + VW + 24) { e.active = true; enemyShout(e); } else continue;
+    }
     e.anim += 0.12;
+    if (e.type === 'book') {
+      // voa para a esquerda balançando e mirando a altura do Flávio
+      e.t++;
+      e.baseY += clamp(p.y + 4 - e.baseY, -0.2, 0.2);
+      e.x -= e.speed;
+      e.y = e.baseY + Math.sin(e.t * 0.06) * 10;
+      if (e.x < cam.x - 80) { e.gone = true; continue; }
+      if (state === 'play' && overlap(p, e)) {
+        if (p.vy > 0 && p.y + p.h - p.vy <= e.y + 6) stomp(e); else hurt();
+      }
+      continue;
+    }
     e.vx = e.dir * e.speed;
     e.x += e.vx;
     if (collideX(e)) e.dir *= -1;
     // agentes da PF não caem dos buracos
-    if (e.type === 'agent' && e.onGround) {
+    if (e.type === 'militante' && e.onGround && --e.hop <= 0) { e.vy = -3.6; e.hop = 80 + Math.random() * 100; }
+    if (e.type !== 'paper' && e.onGround) {
       const fx = e.dir > 0 ? e.x + e.w + 1 : e.x - 1;
       if (!solidAt(Math.floor(fx / TS), Math.floor((e.y + e.h + 4) / TS))) e.dir *= -1;
     }
@@ -928,7 +967,7 @@ function drawHeart(x, y, col) {
 }
 
 function drawBubble(b, avoid) {
-  const ent = b.who === 'lula' ? lula : player;
+  const ent = b.who === 'lula' ? lula : b.who === 'flavio' ? player : b.ent;
   const cx = Math.round(cam.x);
   let ax = ent.x + ent.w / 2 - cx, ay = ent.y - 12;
   if (b.who === 'flavio' && player.hidden) { ax = L.plane.x + 60 - cx; ay = L.plane.y; }
@@ -942,7 +981,7 @@ function drawBubble(b, avoid) {
     by = Math.max(18, avoid.y - bh - 8);
   }
   const tailX = Math.round(clamp(ax, bx + 4, bx + bw - 6));
-  const border = b.who === 'lula' ? '#d01c1c' : '#1d2b53';
+  const border = { lula: '#d01c1c', flavio: '#1d2b53', militante: '#ff6a2a', pf: '#111111', cf: '#1f7a3a' }[b.who] || '#111';
   ctx.fillStyle = border;
   ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
   ctx.fillRect(tailX - 1, by + bh, 5, 3); ctx.fillRect(tailX, by + bh + 3, 3, 2);
@@ -1002,8 +1041,32 @@ function render() {
       const img = Sprites.paper(fr);
       if (e.dead && !e.flip) ctx.drawImage(img, 0, 0, 16, 16, Math.round(e.x - 2 - cx), Math.round(e.y + e.h - 6), 16, 6);
       else drawSprite(img, e.x - 2 - cx, e.y + e.h - 16, e.dir > 0, e.dead);
+    } else if (e.type === 'book') {
+      const bx = Math.round(e.x - 1 - cx), by = Math.round(e.y);
+      if (!e.dead) {
+        const up = fr ? -3 : 1;
+        ctx.fillStyle = '#f4f1e4';
+        ctx.fillRect(bx - 5, by + 4 + up, 5, 3); ctx.fillRect(bx - 3, by + 3 + up, 3, 1);
+        ctx.fillRect(bx + 16, by + 4 + up, 5, 3); ctx.fillRect(bx + 16, by + 3 + up, 3, 1);
+      }
+      drawSprite(Sprites.book(), bx, by, false, e.dead);
     } else {
-      drawSprite(Sprites.agent(fr ? 'run1' : 'run2'), e.x - 2 - cx, e.y + e.h - 28, e.dir < 0, e.dead);
+      const sx = e.x - 2 - cx, sy = e.y + e.h - 28;
+      const fr2 = !e.onGround ? 'jump' : fr ? 'run1' : 'run2';
+      if (e.type === 'militante') {
+        drawSprite(Sprites.militante(fr2), sx, sy, e.dir < 0, e.dead);
+        if (!e.dead) {
+          // bandeira vermelha com estrela
+          const px = Math.round(e.dir < 0 ? sx + 2 : sx + 13), py = Math.round(sy + 2);
+          const wave = Math.floor(frame / 8) % 2;
+          ctx.fillStyle = '#6a4a2a'; ctx.fillRect(px, py, 1, 18);
+          const fx = e.dir < 0 ? px - 9 : px + 1;
+          ctx.fillStyle = '#e02020'; ctx.fillRect(fx, py + wave, 9, 6);
+          ctx.fillStyle = '#fff'; ctx.fillRect(fx + 4, py + 1 + wave, 1, 4); ctx.fillRect(fx + 3, py + 2 + wave, 3, 1);
+        }
+      } else {
+        drawSprite(Sprites.agent(fr ? 'run1' : 'run2'), sx, sy, e.dir < 0, e.dead);
+      }
     }
   }
 
@@ -1224,7 +1287,7 @@ function renderSounds() {
     const has = !!Voice.custom(id);
     const label = document.createElement('div');
     label.className = 'sound-label';
-    label.innerHTML = `<b>${line.who === 'lula' ? 'LULA' : 'FLÁVIO'}</b> "${line.text}"` +
+    label.innerHTML = `<b>${Voice.WHO[line.who]}</b> "${line.text}"` +
       `<small>${has ? '● gravação deste aparelho' : Voice.hasFile(id) ? '● áudio da pasta vozes/' : 'voz do celular'}</small>`;
     const btns = document.createElement('div');
     btns.className = 'sound-btns';
