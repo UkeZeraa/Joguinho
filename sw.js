@@ -1,5 +1,5 @@
 // Service worker simples: guarda os arquivos para o jogo abrir sem internet.
-const CACHE = 'fuga-flavio-v2';
+const CACHE = 'fuga-flavio-v3';
 const FILES = ['./', 'index.html', 'style.css', 'audio.js', 'sprites.js', 'game.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {

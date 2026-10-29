@@ -6,6 +6,10 @@ const Sfx = (() => {
 
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    // celulares (principalmente iPhone) só liberam a voz sintetizada depois de um toque
+    if ('speechSynthesis' in window) {
+      try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) { /* ignora */ }
+    }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ac = new AC();
