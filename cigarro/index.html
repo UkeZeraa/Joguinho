@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#2a1a3a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Cadê Meu Cigarro?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; background: #000; overflow: hidden; color: #fff;
+    font-family: "Press Start 2P", monospace;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    touch-action: manipulation; overscroll-behavior: none;
+  }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; touch-action: none; }
+  #game { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+  .btn {
+    font: inherit; font-size: 12px; color: #fff; cursor: pointer; text-decoration: none; text-align: center;
+    background: #6a2a8a; border: 3px solid #fff; padding: 12px 16px; box-shadow: 4px 4px 0 #000;
+  }
+  .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+  .btn.primary { background: #e0701a; }
+  .btn.small { font-size: 9px; padding: 8px 10px; }
+
+  .icon-btn {
+    font: inherit; font-size: 12px; width: 40px; height: 40px; color: #fff; cursor: pointer;
+    background: rgba(0, 0, 0, .45); border: 2px solid rgba(255, 255, 255, .7);
+  }
+  .icon-btn.off { color: #ff6060; }
+  #topbar {
+    position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+    display: none; gap: 8px; z-index: 5;
+  }
+  #topbar.show { display: flex; }
+
+  .screen {
+    position: absolute; inset: 0; display: none; flex-direction: column; align-items: center;
+    gap: 14px; padding: 18px 16px; overflow-y: auto; text-align: center; z-index: 6;
+    background: rgba(20, 8, 30, .6);
+  }
+  .screen > :first-child { margin-top: auto; }
+  .screen > :last-child { margin-bottom: auto; }
+  .screen.show { display: flex; }
+  .title { font-size: clamp(20px, 5.5vw, 36px); line-height: 1.35; color: #ffd23a; text-shadow: 4px 4px 0 #6a2a8a, -2px -2px 0 #000; }
+  .subtitle { font-size: 9px; line-height: 1.8; max-width: 520px; text-shadow: 2px 2px 0 #000; }
+  .buttons { display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
+  .best { font-size: 10px; color: #ffd23a; text-shadow: 2px 2px 0 #000; }
+  .hint { font-size: 8px; line-height: 1.8; color: #dde; text-shadow: 1px 1px 0 #000; }
+  .panel { background: #3a1a4a; border: 4px solid #fff; box-shadow: 6px 6px 0 #000; padding: 22px 20px; max-width: 480px; width: 100%; }
+  .panel h2 { font-size: 20px; color: #ff5a3a; text-shadow: 3px 3px 0 #000; }
+  #over-text { font-size: 10px; line-height: 2; margin: 16px 0 18px; }
+  #over-text b { color: #ffd23a; }
+  .panel .buttons { margin: 0 auto; }
+  #rotate-hint {
+    display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; background: rgba(0,0,0,.7); padding: 8px 10px; border: 2px solid #ffd23a; z-index: 7;
+    pointer-events: none; white-space: nowrap;
+  }
+  @media (orientation: portrait) and (pointer: coarse) { #rotate-hint { display: block; } }
+  @media (max-height: 420px) { .screen { gap: 8px; padding: 10px; } .hint { display: none; } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div id="topbar">
+    <button id="btn-mute" class="icon-btn" aria-label="Som">♪</button>
+    <button id="btn-pause" class="icon-btn" aria-label="Pausar">II</button>
+  </div>
+
+  <section id="screen-menu" class="screen show">
+    <h1 class="title">CADÊ MEU<br>CIGARRO?</h1>
+    <p class="subtitle">O Seu Tonhão está em abstinência e o cigarro dele criou perninhas!
+      Corra atrás, dê aquela tragada e feche com um cafezinho.</p>
+    <div class="buttons">
+      <button class="btn primary" id="btn-play">▶ JOGAR</button>
+      <a class="btn small" href="../">◀ FUGA DO FLÁVIO</a>
+    </div>
+    <p class="best">RECORDE: <span id="best">0</span></p>
+    <p class="hint">Toque na tela (ou ESPAÇO) para pular. Segure para pular mais alto.<br>
+      Na hora de fumar, toque rápido. No café, toque na hora certa.</p>
+  </section>
+
+  <section id="screen-over" class="screen">
+    <div class="panel">
+      <h2 id="over-title">SURTOU!</h2>
+      <div id="over-text"></div>
+      <div class="buttons">
+        <button class="btn primary" id="btn-again">JOGAR DE NOVO</button>
+        <button class="btn small" id="btn-menu">MENU</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-pause" class="screen">
+    <div class="panel">
+      <h2>PAUSA</h2>
+      <div id="pause-text" style="font-size:10px;line-height:2;margin:16px 0 18px">O cigarro está te esperando...</div>
+      <div class="buttons">
+        <button class="btn primary" id="btn-resume">CONTINUAR</button>
+        <button class="btn small" id="btn-menu2">MENU</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="rotate-hint">Gire o celular ↻ para jogar melhor</div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>

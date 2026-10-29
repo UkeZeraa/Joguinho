@@ -1,3 +1,14 @@
+# Joguinhos
+
+| Jogo | Pasta | Link (GitHub Pages) |
+| --- | --- | --- |
+| Fuga do Flávio | raiz | https://ukezeraa.github.io/Joguinho/ |
+| Cadê Meu Cigarro? | [`cigarro/`](cigarro/) | https://ukezeraa.github.io/Joguinho/cigarro/ |
+
+Cada jogo fica na sua própria pasta, com seus arquivos, vozes e recorde salvos separados.
+
+---
+
 # Fuga do Flávio ✈️
 
 Jogo de plataforma 2D no estilo 8 bits para celular (e PC). Ajude o Flávio a atravessar
@@ -60,3 +71,18 @@ Não precisa instalar nada — é HTML + JavaScript puro.
 | `sprites.js` | Pixel art dos personagens e lista de skins |
 | `audio.js` | Música 8 bits, efeitos sonoros e falas |
 | `sw.js` / `manifest.webmanifest` | Funcionar offline e instalar como app |
+
+---
+
+# Cadê Meu Cigarro? 🚬☕
+
+O Seu Tonhão está em abstinência e o cigarro dele criou perninhas e fugiu!
+
+1. **Corrida:** toque na tela (ou Espaço) para pular cones, lixeiras, cachorros e cascas de banana.
+   Cada batida atrasa o Tonhão e aumenta a **abstinência**. Se a barra encher, ele surta.
+2. **Fumada:** ao alcançar o cigarro, toque rápido 5 vezes para dar as tragadas e acalmar.
+3. **Cafezinho:** na padaria, toque quando a agulha estiver na faixa verde. Errou, queima a língua!
+4. Outro cigarro foge do maço, cada vez mais rápido.
+
+Pontos: 100 por cigarro, 50 por cafezinho no ponto. As falas ficam em `cigarro/vozes/`
+e podem ser trocadas por gravações com o mesmo nome de arquivo.

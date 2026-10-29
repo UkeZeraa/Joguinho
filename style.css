@@ -16,6 +16,7 @@ html, body {
 }
 .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
 .btn.primary { background: #2f9e44; }
+a.btn { text-decoration: none; text-align: center; }
 .btn.small { font-size: 9px; padding: 8px 10px; }
 .btn.tiny { font-size: 8px; padding: 7px 8px; border-width: 2px; box-shadow: 2px 2px 0 #000; }
 .btn.rec { background: #d01c1c; animation: blink .6s steps(2) infinite; }
