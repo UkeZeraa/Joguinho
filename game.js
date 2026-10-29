@@ -292,12 +292,14 @@ function collideY(e) {
 }
 
 // ===== Falas e balões =====
-function say(id) {
+// O balão aparece quando a fala começa de fato (as falas entram numa fila)
+function say(id, interrupt) {
   const line = Voice.LINES[id];
   if (!line) return;
-  Voice.play(id);
-  bubbles = bubbles.filter(b => b.who !== line.who);
-  bubbles.push({ who: line.who, text: line.text, t: 160 });
+  Voice.play(id, { interrupt, onStart: () => {
+    bubbles = bubbles.filter(b => b.who !== line.who);
+    bubbles.push({ who: line.who, text: line.text, t: 160 });
+  } });
 }
 const queueSay = (id, delay) => speechQ.push({ id, delay });
 
@@ -327,6 +329,7 @@ function startLevel(n) {
   checkpoint = { x: sx, y: player.y };
   lula = { x: sx - 130, y: player.y, w: 12, h: 22, base: 1.2 + n * 0.15, anim: 0, facing: 1, wait: 70, talk: 40 };
   parts = []; bubbles = []; speechQ = []; bumps.clear();
+  Voice.stop();
   cam.x = 0; frame = 0; banner = 160;
   state = 'play';
   showScreen(null);
@@ -604,7 +607,7 @@ function die(cause) {
   state = 'dying'; stateT = 0; deathCause = cause;
   player.vy = -5; player.vx = 0;
   Sfx.stopMusic(); Sfx.setDanger(false); Sfx.play('die');
-  say(cause === 'lula' ? 'lula_peguei' : 'flavio_ai');
+  say(cause === 'lula' ? 'lula_peguei' : 'flavio_ai', true);
   updateTouch();
 }
 
@@ -625,6 +628,7 @@ function respawn() {
   cam.x = clamp(player.x - VW * 0.42, 0, L.w * TS - VW);
   lula.x = player.x - 180; lula.y = player.y; lula.wait = 60; lula.talk = 220;
   speechQ = [];
+  Voice.stop();
   state = 'play';
   updateTouch();
   Sfx.startMusic(L.n);
@@ -645,6 +649,7 @@ function board() {
   player.hidden = true;
   Sfx.setDanger(false); Sfx.stopMusic();
   speechQ = [];
+  Voice.stop();
   queueSay('flavio_fui', 10);
   queueSay('lula_aviao', 120);
   updateTouch();
@@ -687,6 +692,7 @@ function togglePause() {
   if (state === 'play') {
     state = 'paused';
     Sfx.stopMusic();
+    Voice.stop();
     persist();
     showDialog('PAUSA', 'O Lula está esperando...', [
       { label: 'CONTINUAR', primary: true, fn: resume },
@@ -1100,7 +1106,7 @@ function showDialog(title, html, buttons) {
 }
 
 function toMenu() {
-  Sfx.stopMusic(); Sfx.setDanger(false);
+  Sfx.stopMusic(); Sfx.setDanger(false); Voice.stop();
   persist();
   state = 'menu'; L = null;
   refreshMenu();
@@ -1219,7 +1225,7 @@ function renderSounds() {
     const label = document.createElement('div');
     label.className = 'sound-label';
     label.innerHTML = `<b>${line.who === 'lula' ? 'LULA' : 'FLÁVIO'}</b> "${line.text}"` +
-      `<small>${has ? '● gravação personalizada' : 'voz do celular'}</small>`;
+      `<small>${has ? '● gravação deste aparelho' : Voice.hasFile(id) ? '● áudio da pasta vozes/' : 'voz do celular'}</small>`;
     const btns = document.createElement('div');
     btns.className = 'sound-btns';
     const mk = (txt, fn, cls) => {
@@ -1229,7 +1235,7 @@ function renderSounds() {
       btns.appendChild(b);
       return b;
     };
-    mk('▶', () => { Sfx.init(); Voice.play(id, true); });
+    mk('▶', () => { Sfx.init(); Voice.play(id, { force: true }); });
     mk(recId === id ? '■ PARAR' : '● GRAVAR', () => toggleRecord(id), recId === id ? 'rec' : '');
     mk('ARQUIVO', () => { fileTarget = id; $('file-input').click(); });
     if (has) mk('✕', () => { Voice.clearCustom(id); renderSounds(); });
@@ -1284,7 +1290,7 @@ function loop(now) {
 if (/debug/.test(location.search)) {
   window.__dbg = {
     get state() { return state; }, get player() { return player; }, get L() { return L; },
-    get lives() { return lives; }, startGame, genLevel,
+    get lives() { return lives; }, get bubbles() { return bubbles; }, startGame, genLevel, say,
     toPlane() { player.x = L.plane.x - 30; player.y = 10 * TS - 30; lula.x = player.x - 200; },
     god() { player.invuln = 1e9; },
   };

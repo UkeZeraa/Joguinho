@@ -127,8 +127,8 @@ const Sfx = (() => {
 })();
 
 // ===== Falas dos personagens =====
-// Se o jogador gravou (ou escolheu um arquivo) para uma fala, toca a gravação.
-// Senão, usa a voz sintetizada do próprio celular em português.
+// Ordem de prioridade de cada fala: gravação feita no aparelho (tela VOZES),
+// arquivo na pasta vozes/ do projeto, e por último a voz sintetizada do celular.
 const Voice = (() => {
   const LINES = {
     lula_pegar: { who: 'lula', text: 'Vou te pegar, Flávio!' },
@@ -143,7 +143,7 @@ const Voice = (() => {
   };
   const PREFIX = 'fugaFlavio_voz_';
   const hasTTS = 'speechSynthesis' in window;
-  let voices = [], current = null;
+  let voices = [];
 
   if (hasTTS) {
     const load = () => { voices = speechSynthesis.getVoices(); };
@@ -152,31 +152,84 @@ const Voice = (() => {
   }
   const ptVoice = () => voices.find(v => /pt[-_]BR/i.test(v.lang)) || voices.find(v => /^pt/i.test(v.lang));
 
+  // Áudios colocados na pasta vozes/ do projeto (ex.: vozes/lula_pegar.mp3)
+  // valem para todo mundo que abrir o jogo. Gravações feitas no celular têm prioridade.
+  const files = {};
+  for (const id of Object.keys(LINES)) {
+    const url = 'vozes/' + id + '.mp3';
+    fetch(url, { method: 'HEAD' }).then(r => { if (r.ok) files[id] = url; }).catch(() => {});
+  }
+
   function custom(id) { try { return localStorage.getItem(PREFIX + id); } catch (e) { return null; } }
   function setCustom(id, data) { try { localStorage.setItem(PREFIX + id, data); return true; } catch (e) { return false; } }
   function clearCustom(id) { try { localStorage.removeItem(PREFIX + id); } catch (e) { /* ignora */ } }
+  const hasFile = id => !!files[id];
 
-  function play(id, force) {
-    const line = LINES[id];
-    if (!line || (Sfx.muted && !force)) return;
-    const data = custom(id);
-    if (data) {
+  // ----- Fila de falas: um personagem espera o outro terminar de falar -----
+  let queue = [], cur = null;
+
+  // opts.onStart: chamado quando a fala começa de verdade (para mostrar o balão junto)
+  // opts.interrupt: corta o que estiver tocando (ex.: "Peguei você!")
+  // opts.force: toca mesmo com o som desligado (botão de ouvir na tela de vozes)
+  function play(id, opts) {
+    opts = opts || {};
+    if (!LINES[id]) return;
+    if (Sfx.muted && !opts.force) { if (opts.onStart) opts.onStart(); return; }
+    if (opts.interrupt || opts.force) stop();
+    queue = queue.filter(q => q.id !== id);
+    queue.push({ id, onStart: opts.onStart, t: Date.now() });
+    if (queue.length > 2) queue.shift(); // não acumula falas atrasadas
+    next();
+  }
+
+  function next() {
+    if (cur) return;
+    while (queue.length && Date.now() - queue[0].t > 5000) queue.shift();
+    const q = queue.shift();
+    if (!q) return;
+    const line = LINES[q.id];
+    const me = cur = { audio: null, timer: 0 };
+    const done = () => {
+      if (cur !== me) return;
+      clearTimeout(me.timer);
+      cur = null;
+      setTimeout(next, 250);
+    };
+    if (q.onStart) q.onStart();
+
+    const src = custom(q.id) || files[q.id];
+    if (src) {
+      me.timer = setTimeout(done, 8000); // segurança caso o áudio trave
       try {
-        if (current) current.pause();
-        current = new Audio(data);
-        current.play().catch(() => {});
-      } catch (e) { /* ignora */ }
+        me.audio = new Audio(src);
+        me.audio.onended = done;
+        me.audio.onerror = done;
+        me.audio.play().catch(done);
+      } catch (e) { done(); }
       return;
     }
+    // segurança: alguns navegadores não avisam quando a voz sintetizada termina
+    me.timer = setTimeout(done, 1500 + line.text.length * 110);
     if (!hasTTS) return;
     const u = new SpeechSynthesisUtterance(line.text);
     u.lang = 'pt-BR';
     const v = ptVoice();
     if (v) u.voice = v;
     if (line.who === 'lula') { u.pitch = 0.3; u.rate = 0.95; } else { u.pitch = 1.6; u.rate = 1.15; }
-    speechSynthesis.cancel();
+    u.onend = done;
+    u.onerror = done;
     speechSynthesis.speak(u);
   }
 
-  return { LINES, play, custom, setCustom, clearCustom };
+  function stop() {
+    queue = [];
+    if (cur) {
+      clearTimeout(cur.timer);
+      if (cur.audio) cur.audio.pause();
+      cur = null;
+    }
+    if (hasTTS) speechSynthesis.cancel();
+  }
+
+  return { LINES, play, stop, custom, setCustom, clearCustom, hasFile };
 })();

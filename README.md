@@ -30,8 +30,12 @@ Para criar uma skin nova, adicione um item na lista `SKINS` em `sprites.js`
 Durante o jogo aparecem balões com as falas ("Vou te pegar, Flávio!", "Não vai pegar meu
 passaporte!", etc.). Por padrão elas são faladas pela voz sintetizada do celular.
 
-Na tela **VOZES** dá para **gravar a sua própria voz** (ou a de um amigo imitando) ou
-escolher um **arquivo de áudio** para cada fala. As gravações ficam salvas no aparelho.
+As falas entram numa fila: um personagem espera o outro terminar antes de falar.
+
+Para trocar as vozes:
+- **Para todo mundo:** coloque arquivos `.mp3` na pasta [`vozes/`](vozes/LEIA-ME.md) com os
+  nomes listados lá (ex.: `lula_pegar.mp3`). Quem abrir o link já ouve esses áudios.
+- **Só no seu aparelho:** na tela **VOZES**, grave a sua voz ou escolha um arquivo para cada fala.
 
 ## Rodar / publicar
 
