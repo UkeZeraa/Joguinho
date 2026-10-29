@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0e1233">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Fuga do Flávio</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div id="topbar">
+    <button id="btn-mute" class="icon-btn" aria-label="Som">♪</button>
+    <button id="btn-pause" class="icon-btn" aria-label="Pausar">II</button>
+  </div>
+
+  <div id="touch">
+    <div id="dpad"><div class="pad-btn" id="pad-left">◀</div><div class="pad-btn" id="pad-right">▶</div></div>
+    <div id="pad-jump">PULA</div>
+  </div>
+
+  <section id="screen-menu" class="screen show">
+    <h1 class="title">FUGA DO<br><span>FLÁVIO</span></h1>
+    <p class="subtitle">"Não vai pegar meu passaporte!"</p>
+    <div class="menu-row">
+      <canvas id="menu-preview" width="16" height="28"></canvas>
+      <div class="menu-buttons">
+        <button class="btn primary" id="btn-play">▶ JOGAR</button>
+        <div class="level-row" id="level-row"></div>
+        <button class="btn" id="btn-skins">SKINS</button>
+        <button class="btn" id="btn-sounds">VOZES</button>
+      </div>
+    </div>
+    <p class="wallet">$ <span id="wallet">0</span> dólares</p>
+    <p class="hint">Fuja do Lula, pule nas plataformas e embarque no avião!<br>
+      PC: ← → andar · ESPAÇO pular · P pausar · M som</p>
+    <p class="disclaimer">Jogo de humor/paródia. Personagens são caricaturas.</p>
+  </section>
+
+  <section id="screen-skins" class="screen">
+    <h2>SKINS</h2>
+    <p class="wallet">$ <span id="wallet2">0</span> dólares</p>
+    <div id="skin-grid"></div>
+    <button class="btn" data-back>VOLTAR</button>
+  </section>
+
+  <section id="screen-sounds" class="screen">
+    <h2>VOZES</h2>
+    <p class="small">Grave sua própria voz (ou de um amigo imitando!) ou escolha um arquivo de áudio para cada fala.
+      Sem gravação, o jogo usa a voz do próprio celular.</p>
+    <div id="sound-list"></div>
+    <input type="file" id="file-input" accept="audio/*" hidden>
+    <button class="btn" data-back>VOLTAR</button>
+  </section>
+
+  <section id="screen-dialog" class="screen">
+    <div class="panel">
+      <h2 id="dlg-title"></h2>
+      <div id="dlg-text"></div>
+      <div id="dlg-buttons"></div>
+    </div>
+  </section>
+
+  <div id="rotate-hint">Gire o celular ↻ para jogar melhor</div>
+</div>
+<script src="audio.js"></script>
+<script src="sprites.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

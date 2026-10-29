@@ -1,0 +1,13 @@
+{
+  "name": "Fuga do Flávio",
+  "short_name": "Fuga do Flávio",
+  "description": "Jogo de plataforma 8 bits: ajude o Flávio a fugir até o avião!",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#0e1233",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
