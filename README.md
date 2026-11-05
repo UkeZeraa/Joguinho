@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | Fuga do Flávio | raiz | https://ukezeraa.github.io/Joguinho/ |
 | Cadê Meu Cigarro? | [`cigarro/`](cigarro/) | https://ukezeraa.github.io/Joguinho/cigarro/ |
+| Apocalipse Z (FPS de zumbis) | [`zumbi/`](zumbi/) | https://ukezeraa.github.io/Joguinho/zumbi/ |
 
 Cada jogo fica na sua própria pasta, com seus arquivos, vozes e recorde salvos separados.
 
@@ -86,3 +87,62 @@ O Seu Tonhão está em abstinência e o cigarro dele criou perninhas e fugiu!
 
 Pontos: 100 por cigarro, 50 por cafezinho no ponto. As falas ficam em `cigarro/vozes/`
 e podem ser trocadas por gravações com o mesmo nome de arquivo.
+
+---
+
+# Apocalipse Z 🧟🔫
+
+Jogo de tiro em **primeira pessoa** (3D, Three.js) num apocalipse zumbi. Você monta o
+equipamento na base e entra em **raids**: sobreviva às ondas, pegue o loot e chegue ao
+heliponto para a **extração**. Se morrer, perde as armas achadas e fica com só 30% da grana.
+
+## Tiers das armas
+
+| Tier | Dano | Vantagens |
+| --- | --- | --- |
+| **Comum** | ×1,00 | — |
+| **Incomum** | ×1,18 | Recarga rápida |
+| **Raro** | ×1,40 | + Perfurante (atravessa 1 zumbi) |
+| **Épico** | ×1,70 | + Balas incendiárias |
+| **Lendário** | ×2,10 | + Perfura 2 zumbis |
+| **Mítico** | ×2,70 | + Balas explosivas e roubo de vida |
+
+Cada tier também melhora o pente, a cadência, a precisão e a recarga. Tipos de arma:
+Pistola e Submetralhadora (secundárias); Fuzil, Escopeta, Sniper e Metralhadora (primárias).
+
+## Base (antes da raid)
+
+- **Equipamento:** escolha a arma primária e a secundária, o colete, as granadas e os kits médicos.
+  A arma aparece em 3D (arraste para girar) com os atributos, e você pode trocar a camuflagem.
+- **Arsenal:** todas as suas armas filtradas por tier. Dá para desmontar as que não quer e ganhar grana.
+- **Loja:** caixas de armas (com roleta e as chances de cada tier), suprimentos, coletes e camuflagens.
+- **Raid:** três zonas: Subúrbio (fácil), Centro em Chamas e Laboratório X-13 (com mais chance de Mítico).
+
+## Na raid
+
+- Zumbis: Errante, Corredor, Cuspidor (ataca de longe), Inchado (explode), Brutamontes e,
+  na última onda, a **Abominação** (chefe que solta arma Épica ou melhor).
+- Barris vermelhos explodem com tiros. Os zumbis soltam grana, munição, vida e armas (com um feixe da cor do tier).
+- **PC:** WASD andar · mouse mirar · clique atirar · botão direito mirar (ADS) · Shift correr ·
+  R recarregar · Q/1/2/rodinha trocar arma · G granada · F kit médico · Esc pausa.
+- **Celular:** o lado esquerdo da tela é o joystick, arraste o lado direito para olhar, e os botões
+  ficam na tela (o botão de atirar também gira a câmera enquanto você arrasta).
+
+O progresso fica salvo no navegador (localStorage). O Three.js está em `zumbi/lib/` (licença MIT),
+então o jogo não depende de CDN.
+
+## Testar no Expo Go 📱
+
+A pasta [`zumbi-expo/`](zumbi-expo/) é um app Expo (SDK 58) que abre o jogo numa WebView
+em tela cheia e deitada. O Expo Go já traz a WebView, então não precisa de build nativo.
+
+1. Publique o jogo (GitHub Pages com o branch onde está a pasta `zumbi/`), ou rode um servidor local
+   e troque `GAME_URL` em `zumbi-expo/App.js` pelo IP do seu PC (ex.: `http://192.168.0.10:8000/zumbi/`).
+2. No PC:
+   ```bash
+   cd zumbi-expo
+   npm install
+   npx expo start
+   ```
+3. Abra o **Expo Go** no celular e escaneie o QR code (o celular precisa estar na mesma rede;
+   se não estiver, use `npx expo start --tunnel`).

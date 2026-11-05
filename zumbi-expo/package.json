@@ -1,0 +1,18 @@
+{
+  "name": "apocalipse-z",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "tunnel": "expo start --tunnel"
+  },
+  "dependencies": {
+    "expo": "~58.0.23",
+    "expo-screen-orientation": "~58.0.4",
+    "expo-status-bar": "~58.0.4",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-webview": "14.0.1"
+  }
+}
