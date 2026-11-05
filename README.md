@@ -124,9 +124,14 @@ Pistola e Submetralhadora (secundárias); Fuzil, Escopeta, Sniper e Metralhadora
   na última onda, a **Abominação** (chefe que solta arma Épica ou melhor).
 - Barris vermelhos explodem com tiros. Os zumbis soltam grana, munição, vida e armas (com um feixe da cor do tier).
 - **PC:** WASD andar · mouse mirar · clique atirar · botão direito mirar (ADS) · Shift correr ·
-  R recarregar · Q/1/2/rodinha trocar arma · G granada · F kit médico · Esc pausa.
-- **Celular:** o lado esquerdo da tela é o joystick, arraste o lado direito para olhar, e os botões
-  ficam na tela (o botão de atirar também gira a câmera enquanto você arrasta).
+  Espaço pular · R recarregar · Q/1/2/rodinha trocar arma · G granada · F kit médico · Esc pausa.
+  Se o mouse não ficar preso na tela (ex.: dentro de outra página), segure o botão e arraste para olhar.
+- **Celular:** o lado esquerdo da tela é o joystick, arraste o lado direito para olhar, segure 🔥 para
+  atirar (ele também gira a câmera enquanto você arrasta) e ⤒ para pular.
+- **Pulo:** dá para subir em barreiras e caixas baixas.
+- **Opções** (na aba Raid e na pausa): sensibilidade da câmera, **mira assistida** (a mira gruda nos
+  zumbis) e **tiro automático** (atira sozinho quando a mira fica vermelha em cima de um zumbi).
+  As duas vêm ligadas no celular.
 
 O progresso fica salvo no navegador (localStorage). O Three.js está em `zumbi/lib/` (licença MIT),
 então o jogo não depende de CDN.

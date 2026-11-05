@@ -434,8 +434,25 @@ $('btnSom').addEventListener('click', () => {
   $('btnSom').textContent = 'Som: ' + (save.opcoes.som ? 'ligado' : 'desligado');
 });
 $('btnSom').textContent = 'Som: ' + (save.opcoes.som ? 'ligado' : 'desligado');
-$('sens').value = save.opcoes.sens;
-$('sens').addEventListener('input', e => { save.opcoes.sens = +e.target.value; gravar(); });
+// opções de controle (aparecem na aba Raid e na pausa)
+function renderOpcoes() {
+  const o = save.opcoes;
+  const assist = o.assist ?? mobile, auto = o.autoTiro ?? mobile;
+  document.querySelectorAll('[data-opcoes]').forEach(el => {
+    el.innerHTML = `
+      <label>Sensibilidade da câmera <input type="range" min="0.3" max="2.5" step="0.1" value="${o.sens}" data-op="sens"></label>
+      <label><span>Mira assistida<br><small>a mira gruda nos zumbis</small></span><input type="checkbox" data-op="assist" ${assist ? 'checked' : ''}></label>
+      <label><span>Tiro automático<br><small>atira sozinho com a mira no zumbi</small></span><input type="checkbox" data-op="autoTiro" ${auto ? 'checked' : ''}></label>`;
+    el.querySelectorAll('[data-op]').forEach(inp => inp.addEventListener('input', () => {
+      const k = inp.dataset.op;
+      o[k] = inp.type === 'checkbox' ? inp.checked : +inp.value;
+      gravar();
+      if (inp.type === 'checkbox') renderOpcoes();
+    }));
+    el.querySelectorAll('input[type=range]').forEach(inp => inp.addEventListener('change', renderOpcoes));
+  });
+}
+renderOpcoes();
 $('btnReset').addEventListener('click', () => {
   if (confirm('Apagar todo o progresso (armas, grana, estatísticas)?')) { save = resetar(); armaFoco = null; render(); }
 });
