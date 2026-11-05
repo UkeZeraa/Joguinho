@@ -65,9 +65,11 @@
         <button id="btnIniciar" class="btn grande">INICIAR RAID</button>
         <div class="controles">
           <b>PC:</b> WASD mover · Mouse mirar · Clique atirar · Botão direito mirar (ADS) · Shift correr ·
-          R recarregar · Q/1/2 trocar arma · G granada · F kit médico · Esc pausa<br>
-          <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · botões na tela. Jogue com o celular deitado.
+          Espaço pular · R recarregar · Q/1/2 trocar arma · G granada · F kit médico · Esc pausa
+          (se o mouse não ficar preso, segure o botão e arraste para olhar)<br>
+          <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · 🔥 atira (segure) · ⤒ pula. Jogue com o celular deitado.
         </div>
+        <div class="opcoes" data-opcoes></div>
         <div id="estatisticas"></div>
         <button id="btnReset" class="btn mini perigo">Apagar progresso</button>
       </div>
@@ -134,13 +136,14 @@
     <button class="tb trocar" data-acao="trocar">⇄</button>
     <button class="tb granada" id="btnGranada" data-acao="granada">💣<span>0</span></button>
     <button class="tb kit" id="btnKit" data-acao="kit">✚<span>0</span></button>
+    <button class="tb pular" data-acao="pular">⤒</button>
   </div>
 
   <div id="pausa" class="overlay">
     <div class="painel">
       <h1>PAUSA</h1>
       <button id="btnContinuar" class="btn grande">Continuar</button>
-      <label class="sens">Sensibilidade <input id="sens" type="range" min="0.3" max="2.5" step="0.1"></label>
+      <div class="opcoes" data-opcoes></div>
       <button id="btnSom" class="btn">Som: ligado</button>
       <button id="btnAbandonar" class="btn perigo">Abandonar raid (perde o loot)</button>
     </div>

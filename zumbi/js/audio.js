@@ -99,6 +99,8 @@ export const som = {
   pegar() { tom('square', 660, 660, 0.06, 0.12); tom('square', 990, 990, 0.08, 0.12, 0.07); },
   raro() { [523, 659, 784, 1046].forEach((f, i) => tom('triangle', f, f, 0.18, 0.15, i * 0.08)); },
   onda() { tom('sawtooth', 110, 110, 0.6, 0.25); tom('sawtooth', 165, 165, 0.6, 0.18, 0.05); },
+  pulo() { noise(0.12, 600, 0.15, 'bandpass', 1.5); },
+  passo() { noise(0.1, 300, 0.3); tom('sine', 90, 50, 0.08, 0.2); },
   clique() { tom('square', 1300, 1200, 0.02, 0.08); },
   tick() { tom('square', 2000, 1800, 0.015, 0.05); },
   cura() { [400, 600, 800].forEach((f, i) => tom('sine', f, f * 1.2, 0.15, 0.15, i * 0.08)); },

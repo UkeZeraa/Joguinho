@@ -305,8 +305,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     }
   }
 
-  function colidir(o, r) {
+  function colidir(o, r, pe = -1) {
     for (const b of obst) {
+      if (pe >= 0 && b.h <= pe + 0.05) continue; // está em cima deste obstáculo
       const cx = clamp(o.x, b.minx, b.maxx), cz = clamp(o.z, b.minz, b.maxz);
       const dx = o.x - cx, dz = o.z - cz;
       const d2 = dx * dx + dz * dz;
@@ -323,6 +324,17 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       }
     }
     o.x = clamp(o.x, -L + 1, L - 1); o.z = clamp(o.z, -L + 1, L - 1);
+  }
+
+  // altura do que está embaixo do jogador (chão = 0, ou o topo de um carro/caixa)
+  function alturaChao(x, z, r, pe) {
+    let h = 0;
+    for (const b of obst) {
+      if (b.h > pe + 0.05 || b.h <= h) continue;
+      const cx = clamp(x, b.minx, b.maxx), cz = clamp(z, b.minz, b.maxz);
+      if ((x - cx) ** 2 + (z - cz) ** 2 < r * r * 0.5) h = b.h;
+    }
+    return h;
   }
 
   // ---------- partículas (instanciadas) ----------
@@ -386,6 +398,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     x: INICIO.x, z: INICIO.z, yaw: 0, pitch: 0, hp: 100, hpMax: 100,
     armadura: loadout.armadura, armaduraMax: loadout.armadura,
     granadas: loadout.granadas, kits: loadout.kits, curando: 0, passo: 0, morto: false,
+    y: 0, vy: 0, noChao: true, pousou: 0,
   };
   const armas = loadout.armas.filter(Boolean).map(a => {
     const st = stats(a);
@@ -742,6 +755,36 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     }
   }
 
+  const fwd = new THREE.Vector3();
+  function procurarAlvo(st) {
+    const ox = jog.x, oy = jog.y + ALTURA_OLHO, oz = jog.z;
+    const cp = Math.cos(jog.pitch);
+    fwd.set(-Math.sin(jog.yaw) * cp, Math.sin(jog.pitch), -Math.cos(jog.yaw) * cp);
+    let melhor = null;
+    for (const z of zumbis) {
+      if (!z.vivo) continue;
+      const s = z.escala;
+      const dx = z.x - ox, dz = z.z - oz, dist = Math.hypot(dx, dz);
+      if (dist > st.alcance * 1.1 || dist < 0.3) continue;
+      const ty = (dist < 6 ? 1.2 : 1.45) * s; // peito de perto, mais alto de longe
+      const dy = ty - oy, d3 = Math.hypot(dx, dy, dz);
+      const ang = Math.acos(clamp((dx * fwd.x + dy * fwd.y + dz * fwd.z) / d3, -1, 1));
+      if (ang > 0.2 || (melhor && ang >= melhor.ang)) continue;
+      // tem parede no caminho?
+      const ux = dx / d3, uy = dy / d3, uz = dz / d3;
+      let bloqueado = false;
+      for (const b of obst) {
+        const t = raioCaixa(ox, oy, oz, ux, uy, uz, b.minx, 0, b.minz, b.maxx, b.h, b.maxz, d3);
+        if (t >= 0 && t < d3 - z.raio) { bloqueado = true; break; }
+      }
+      if (bloqueado) continue;
+      // a mira está em cima do corpo? (tamanho angular do zumbi)
+      const raioAng = Math.atan((z.raio * 0.9 + 0.1) / d3);
+      melhor = { z, ang, naMira: ang < raioAng, yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, dist) };
+    }
+    return melhor;
+  }
+
   function recarregar() {
     const a = armas[atual];
     if (recarregando > 0 || trocando > 0 || a.pente >= a.st.pente || a.reserva <= 0) return;
@@ -755,6 +798,11 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     atual = i; recarregando = 0; trocando = 0.45;
     som.troca();
     equiparVisual();
+  }
+  function pular() {
+    if (!jog.noChao || jog.morto || pausado) return;
+    jog.vy = 7.6; jog.noChao = false;
+    som.pulo();
   }
   function usarKit() {
     if (jog.kits <= 0 || jog.curando > 0 || jog.hp >= jog.hpMax || jog.morto) return;
@@ -804,16 +852,26 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
   let gatilho = false, mirando = false, correndo = false;
   const joy = { id: null, x0: 0, y0: 0, dx: 0, dy: 0 };
   const olhar = new Map(); // pointerId -> {x,y}
-  const sens = (opcoes.sens || 1);
+  const opc = () => ({
+    sens: opcoes.sens || 1,
+    assist: opcoes.assist ?? mobile,
+    autoTiro: opcoes.autoTiro ?? mobile,
+  });
+  let alvoAssist = null; // zumbi perto da mira (para a mira assistida)
 
   function girar(dx, dy, fator) {
     const z = 1 / (1 + (armas[atual].st.zoom - 1) * mira);
-    jog.yaw -= dx * fator * sens * z;
-    jog.pitch = clamp(jog.pitch - dy * fator * sens * z, -1.45, 1.45);
+    // com a mira assistida, a câmera fica mais lenta em cima de um zumbi (fica fácil acertar)
+    const freio = alvoAssist && alvoAssist.ang < 0.09 ? 0.55 : 1;
+    const k = fator * opc().sens * z * freio;
+    jog.yaw -= dx * k;
+    jog.pitch = clamp(jog.pitch - dy * k, -1.45, 1.45);
   }
   const onKeyDown = e => {
+    if (e.code === 'Space') e.preventDefault();
     if (e.repeat) return;
     teclas[e.code] = true;
+    if (e.code === 'Space') pular();
     if (e.code === 'KeyR') recarregar();
     if (e.code === 'Digit1') trocarArma(0);
     if (e.code === 'Digit2') trocarArma(1);
@@ -823,19 +881,22 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     if (e.code === 'KeyP') pausar(!pausado);
   };
   const onKeyUp = e => { teclas[e.code] = false; };
+  let arrastoMouse = false;
   const onMouseMove = e => {
-    if (document.pointerLockElement !== canvas || pausado) return;
-    girar(e.movementX, e.movementY, 0.0022);
+    if (pausado) return;
+    if (document.pointerLockElement === canvas) girar(e.movementX, e.movementY, 0.0022);
+    else if (arrastoMouse) girar(e.movementX, e.movementY, 0.004); // sem mouse preso: arraste para olhar
   };
   const onMouseDown = e => {
-    if (mobile) return;
-    if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); return; }
+    if (mobile || pausado) return;
+    if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); arrastoMouse = true; }
     if (e.button === 0) gatilho = true;
     if (e.button === 2) mirando = true;
   };
   const onMouseUp = e => {
     if (e.button === 0) { gatilho = false; disparoSolto = true; }
     if (e.button === 2) mirando = false;
+    if (!e.buttons) arrastoMouse = false;
   };
   const onWheel = e => { if (!pausado) trocarArma(); };
   const onLockChange = () => {
@@ -851,12 +912,13 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       const alvo = t.target.closest ? t.target.closest('[data-acao]') : null;
       if (alvo) {
         const acao = alvo.dataset.acao;
-        if (acao === 'atirar') { gatilho = true; disparoSolto = false; olhar.set(t.identifier, { x: t.clientX, y: t.clientY, atirar: true }); }
+        if (acao === 'atirar') { gatilho = true; disparoSolto = true; olhar.set(t.identifier, { x: t.clientX, y: t.clientY, atirar: true }); }
         else if (acao === 'mirar') mirando = !mirando;
         else if (acao === 'recarregar') recarregar();
         else if (acao === 'trocar') trocarArma();
         else if (acao === 'granada') lancarGranada();
         else if (acao === 'kit') usarKit();
+        else if (acao === 'pular') pular();
         else if (acao === 'pausa') pausar(true);
         alvo.classList.add('ativo');
         continue;
@@ -882,7 +944,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
         joyPino.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
       } else if (olhar.has(t.identifier)) {
         const o = olhar.get(t.identifier);
-        if (!pausado) girar(t.clientX - o.x, t.clientY - o.y, 0.0055);
+        if (!pausado) girar(t.clientX - o.x, t.clientY - o.y, 0.006);
         o.x = t.clientX; o.y = t.clientY;
       }
     }
@@ -989,9 +1051,36 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     const sy = Math.sin(jog.yaw), cy = Math.cos(jog.yaw);
     mov.x = (-sy * f + cy * s) * vel;
     mov.z = (-cy * f - sy * s) * vel;
+    if (!jog.noChao) { mov.x *= 0.92; mov.z *= 0.92; }
     jog.x += mov.x * dt; jog.z += mov.z * dt;
-    colidir(jog, RAIO_JOG);
-    if (mag > 0.1) jog.passo += dt * vel * 1.6;
+    colidir(jog, RAIO_JOG, jog.y);
+    // gravidade / pulo / subir em carros e caixas
+    const chao = alturaChao(jog.x, jog.z, RAIO_JOG, jog.y);
+    if (jog.noChao && jog.y > chao + 0.01) jog.noChao = false; // saiu da beirada
+    if (!jog.noChao) {
+      jog.vy -= 22 * dt;
+      jog.y += jog.vy * dt;
+      if (jog.y <= chao) {
+        if (jog.vy < -4) { jog.pousou = Math.min(1, -jog.vy / 12); som.passo(); }
+        jog.y = chao; jog.vy = 0; jog.noChao = true;
+      }
+    }
+    jog.pousou = Math.max(0, jog.pousou - dt * 4);
+    if (mag > 0.1 && jog.noChao) jog.passo += dt * vel * 1.6;
+
+    // mira assistida / tiro automático
+    alvoAssist = null;
+    const o = opc();
+    if ((o.assist || o.autoTiro) && !jog.morto) alvoAssist = procurarAlvo(st);
+    if (o.assist && alvoAssist && alvoAssist.ang < 0.16 && mira < 0.9) {
+      // puxa a mira suavemente para o peito/cabeça do zumbi
+      const forca = Math.min(1, dt * (mobile ? 4 : 2.2)) * (1 - alvoAssist.ang / 0.16);
+      let dy = alvoAssist.yaw - jog.yaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      jog.yaw += dy * forca;
+      jog.pitch += (alvoAssist.pitch - jog.pitch) * forca * 0.8;
+    }
 
     // mira
     mirando = mirando && !correndo && recarregando <= 0;
@@ -1001,8 +1090,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     cadencia -= dt;
     trocando = Math.max(0, trocando - dt);
     abrirFogo = Math.max(0, abrirFogo - dt * 2.2);
-    if (!jog.morto && gatilho && cadencia <= 0 && recarregando <= 0 && trocando <= 0 && !correndo) {
-      if (st.auto || disparoSolto) { atirar(); disparoSolto = false; }
+    const autoDispara = o.autoTiro && alvoAssist && alvoAssist.naMira && a.pente > 0;
+    if (!jog.morto && (gatilho || autoDispara) && cadencia <= 0 && recarregando <= 0 && trocando <= 0 && !correndo) {
+      if (st.auto || disparoSolto || mobile || autoDispara) { atirar(); disparoSolto = false; }
     }
     if (recarregando > 0) {
       recarregando -= dt;
@@ -1155,7 +1245,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       } else {
         if (Math.random() < 0.6) particula(p.x, p.y, p.z, 0, 0, 0, 0.3, 0.06, 0x9cff3a, 0);
         const dj = Math.hypot(p.x - jog.x, p.z - jog.z);
-        if (dj < 0.7 && p.y < 2) { danoJogador(p.dano); sangue(p.x, p.y, p.z, 6, 0x9cff3a); remover = true; }
+        if (dj < 0.7 && p.y > jog.y - 0.2 && p.y < jog.y + 2) { danoJogador(p.dano); sangue(p.x, p.y, p.z, 6, 0x9cff3a); remover = true; }
         else if (p.y < 0 || p.t <= 0) { sangue(p.x, 0.1, p.z, 8, 0x9cff3a); remover = true; }
         else for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) { remover = true; break; }
       }
@@ -1274,7 +1364,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     const a = armas[atual];
     // câmera
     const bob = Math.hypot(mov.x, mov.z) > 0.1 ? 1 : 0;
-    camera.position.set(jog.x, (jog.morto ? 0.5 : ALTURA_OLHO) + Math.sin(jog.passo * 2) * 0.035 * bob * (1 - mira), jog.z);
+    camera.position.set(jog.x, (jog.morto ? 0.5 : jog.y + ALTURA_OLHO - jog.pousou * 0.12) + Math.sin(jog.passo * 2) * 0.035 * bob * (1 - mira) * (jog.noChao ? 1 : 0), jog.z);
     camera.rotation.set(jog.pitch + rand(-1, 1) * tremor * 0.03, jog.yaw + rand(-1, 1) * tremor * 0.03, jog.morto ? 0.5 : 0);
     const fovAlvo = 75 / (1 + (a.st.zoom - 1) * mira) + (correndo ? 6 : 0);
     if (Math.abs(camera.fov - fovAlvo) > 0.05) { camera.fov += (fovAlvo - camera.fov) * Math.min(1, dt * 14); camera.updateProjectionMatrix(); }
@@ -1288,7 +1378,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     const ads = { x: 0, y: a.def.tipo === 'sniper' ? -0.11 : -0.125, z: -0.55 - comp * 0.2 };
     const sw = Math.sin(jog.passo) * 0.012 * bob * (1 - mira), sh = Math.abs(Math.cos(jog.passo)) * 0.01 * bob * (1 - mira);
     let px = base.x + (ads.x - base.x) * mira + sw;
-    let py = base.y + (ads.y - base.y) * mira - sh;
+    let py = base.y + (ads.y - base.y) * mira - sh - jog.pousou * 0.04 + clamp(jog.vy, -8, 8) * -0.004;
     let pz = base.z + (ads.z - base.z) * mira + chute * 0.05;
     let rx = chute * 0.06, ry = 0.07 * (1 - mira), rz = 0;
     if (recarregando > 0) {
@@ -1325,6 +1415,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     const spread = (a.st.disp * (1 - mira * 0.7) * (Math.hypot(mov.x, mov.z) > 0.1 ? 1.5 : 1) * (1 + Math.min(abrirFogo, 1) * 0.8)) * 900 + 6;
     hud.mira.style.setProperty('--abre', (a.def.tipo === 'sniper' && mira < 0.9 ? 40 : spread) + 'px');
     hud.mira.style.opacity = sniperMira ? 0 : (1 - mira * 0.6);
+    hud.mira.classList.toggle('travada', !!(alvoAssist && alvoAssist.naMira));
     hud.hit.style.opacity = hitmarker > 0 ? 1 : 0;
     hud.hit.classList.toggle('cabeca', hitCabeca);
     hud.dano.style.opacity = Math.max(flashDano, jog.hp < 30 ? 0.35 + Math.sin(tempo * 5) * 0.15 : 0);
@@ -1380,7 +1471,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
   anunciar(zona.nome.toUpperCase(), '#fff', 3);
   raf = requestAnimationFrame(t => { ultimo = t; quadro(t); });
 
-  if (location.search.includes('debug')) window.__raid = { jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; } };
+  if (location.search.includes('debug')) window.__raid = { jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; } };
   return {
     pausar,
     abandonar() { pausado = false; terminar(false); },
