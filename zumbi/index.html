@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#120808">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Apocalipse Z — Raids</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+</head>
+<body>
+
+<!-- ===================== BASE / LOBBY ===================== -->
+<div id="lobby">
+  <header>
+    <div class="logo">APOCALIPSE <b>Z</b><small>RAIDS</small></div>
+    <div class="carteira"><span id="grana">$0</span></div>
+  </header>
+  <nav id="abas">
+    <button data-aba="equip" class="on">Equipamento</button>
+    <button data-aba="arsenal">Arsenal</button>
+    <button data-aba="loja">Loja</button>
+    <button data-aba="raid" class="raid">Raid ▶</button>
+  </nav>
+
+  <main>
+    <!-- EQUIPAMENTO -->
+    <section id="aba-equip" class="aba on">
+      <div class="col slots" id="slots"></div>
+      <div class="col vitrine">
+        <canvas id="preview"></canvas>
+        <div id="vitrineInfo"></div>
+      </div>
+      <div class="col escolha">
+        <h3 id="escolhaTitulo">Escolha</h3>
+        <div id="escolhaLista" class="lista"></div>
+      </div>
+    </section>
+
+    <!-- ARSENAL -->
+    <section id="aba-arsenal" class="aba">
+      <div class="filtros" id="filtros"></div>
+      <div id="arsenalGrade" class="grade"></div>
+    </section>
+
+    <!-- LOJA -->
+    <section id="aba-loja" class="aba">
+      <h3>Caixas de armas</h3>
+      <div id="caixas" class="linha"></div>
+      <h3>Suprimentos</h3>
+      <div id="suprimentos" class="linha"></div>
+      <h3>Coletes</h3>
+      <div id="coletes" class="linha"></div>
+      <h3>Camuflagens</h3>
+      <div id="camos" class="linha"></div>
+    </section>
+
+    <!-- RAID -->
+    <section id="aba-raid" class="aba">
+      <div id="zonas" class="linha zonas"></div>
+      <div class="resumo">
+        <div id="resumoLoadout"></div>
+        <button id="btnIniciar" class="btn grande">INICIAR RAID</button>
+        <div class="controles">
+          <b>PC:</b> WASD mover · Mouse mirar · Clique atirar · Botão direito mirar (ADS) · Shift correr ·
+          R recarregar · Q/1/2 trocar arma · G granada · F kit médico · Esc pausa<br>
+          <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · botões na tela. Jogue com o celular deitado.
+        </div>
+        <div id="estatisticas"></div>
+        <button id="btnReset" class="btn mini perigo">Apagar progresso</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- caixa abrindo -->
+<div id="roleta" class="overlay">
+  <div class="roletaJanela"><div id="roletaFita"></div><div class="roletaSeta"></div></div>
+  <div id="roletaPremio"></div>
+  <button id="roletaOk" class="btn">Pegar</button>
+</div>
+
+<!-- resultado da raid -->
+<div id="resultado" class="overlay">
+  <div class="painel">
+    <h1 id="resTitulo">EXTRAÍDO</h1>
+    <div id="resInfo"></div>
+    <div id="resArmas" class="grade"></div>
+    <button id="resOk" class="btn grande">Voltar à base</button>
+  </div>
+</div>
+
+<!-- ===================== RAID ===================== -->
+<div id="raid">
+  <canvas id="jogo"></canvas>
+  <div id="luneta"></div>
+  <div id="vinheta"></div>
+  <div id="danoNums"></div>
+  <div id="mira"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="hitmarker"></div>
+
+  <div id="hudTopo">
+    <div id="hudOnda">Onda 1</div>
+    <div id="hudVivos"></div>
+  </div>
+  <div id="bossBar"><span>ABOMINAÇÃO</span><div><i id="bossFill"></i></div></div>
+  <div id="anuncio"></div>
+  <div id="hudDir">
+    <canvas id="minimapa"></canvas>
+    <div id="hudGrana">$0</div>
+    <div id="feed"></div>
+  </div>
+  <div id="hudVida">
+    <div class="barra arm"><i id="armFill"></i><span id="armTxt"></span></div>
+    <div class="barra hp"><i id="hpFill"></i><span id="hpTxt">100</span></div>
+    <div id="hudItens"></div>
+  </div>
+  <div id="hudArmaBox">
+    <div id="hudArma"></div>
+    <div id="hudMun"></div>
+    <div id="hudRec"><i id="hudRecFill"></i></div>
+  </div>
+  <div id="hudExt"><span>EXTRAINDO...</span><div><i id="hudExtFill"></i></div></div>
+
+  <div id="toque">
+    <div id="joyBase"><div id="joyPino"></div></div>
+    <button class="tb pausa" data-acao="pausa">II</button>
+    <button class="tb atirar" data-acao="atirar">🔥</button>
+    <button class="tb atirar2" data-acao="atirar">🔥</button>
+    <button class="tb mirar" data-acao="mirar">◎</button>
+    <button class="tb recarregar" data-acao="recarregar">R</button>
+    <button class="tb trocar" data-acao="trocar">⇄</button>
+    <button class="tb granada" id="btnGranada" data-acao="granada">💣<span>0</span></button>
+    <button class="tb kit" id="btnKit" data-acao="kit">✚<span>0</span></button>
+  </div>
+
+  <div id="pausa" class="overlay">
+    <div class="painel">
+      <h1>PAUSA</h1>
+      <button id="btnContinuar" class="btn grande">Continuar</button>
+      <label class="sens">Sensibilidade <input id="sens" type="range" min="0.3" max="2.5" step="0.1"></label>
+      <button id="btnSom" class="btn">Som: ligado</button>
+      <button id="btnAbandonar" class="btn perigo">Abandonar raid (perde o loot)</button>
+    </div>
+  </div>
+  <div id="gire">Gire o celular para jogar deitado ↻</div>
+</div>
+
+<div id="carregando">Carregando...</div>
+<script type="module" src="js/lobby.js"></script>
+</body>
+</html>
