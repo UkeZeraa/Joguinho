@@ -22,6 +22,9 @@
     <button data-aba="equip" class="on">Equipamento</button>
     <button data-aba="arsenal">Arsenal</button>
     <button data-aba="loja">Loja</button>
+    <button data-aba="pericias">Perícias</button>
+    <button data-aba="missoes">Missões</button>
+    <button data-aba="bestiario">Bestiário</button>
     <button data-aba="raid" class="raid">Raid ▶</button>
   </nav>
 
@@ -57,17 +60,41 @@
       <div id="camos" class="linha"></div>
     </section>
 
+    <!-- PERÍCIAS -->
+    <section id="aba-pericias" class="aba">
+      <div id="nivelBox"></div>
+      <div id="periciasGrade" class="grade largas"></div>
+    </section>
+
+    <!-- MISSÕES -->
+    <section id="aba-missoes" class="aba">
+      <h3>Contratos</h3>
+      <p class="sub">Complete os contratos durante as raids e resgate a recompensa. Um novo contrato aparece no lugar.</p>
+      <div id="missoesLista" class="linha"></div>
+    </section>
+
+    <!-- BESTIÁRIO -->
+    <section id="aba-bestiario" class="aba">
+      <h3>Infectados</h3>
+      <div id="bestZumbis" class="grade largas"></div>
+      <h3>Chefes</h3>
+      <div id="bestChefes" class="grade largas"></div>
+    </section>
+
     <!-- RAID -->
     <section id="aba-raid" class="aba">
+      <div class="modos" id="modos"></div>
       <div id="zonas" class="linha zonas"></div>
+      <h3>Modificadores <small>(mais difícil, mais recompensa)</small></h3>
+      <div id="mods" class="linha"></div>
       <div class="resumo">
         <div id="resumoLoadout"></div>
         <button id="btnIniciar" class="btn grande">INICIAR RAID</button>
         <div class="controles">
           <b>PC:</b> WASD mover · Mouse mirar · Clique atirar · Botão direito mirar (ADS) · Shift correr ·
-          Espaço pular · R recarregar · Q/1/2 trocar arma · G granada · F kit médico · Esc pausa
+          Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2 trocar arma · G granada · F kit médico · Esc pausa
           (se o mouse não ficar preso, segure o botão e arraste para olhar)<br>
-          <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · 🔥 atira (segure) · ⤒ pula. Jogue com o celular deitado.
+          <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · 🔥 atira (segure) · ⤒ pula · 🔪 facão · » esquiva · ⚙ torreta. Jogue com o celular deitado.
         </div>
         <div class="opcoes" data-opcoes></div>
         <div id="estatisticas"></div>
@@ -107,7 +134,7 @@
     <div id="hudOnda">Onda 1</div>
     <div id="hudVivos"></div>
   </div>
-  <div id="bossBar"><span>ABOMINAÇÃO</span><div><i id="bossFill"></i></div></div>
+  <div id="bossBar"><span id="bossNome">CHEFE</span><div><i id="bossFill"></i></div><div class="arm"><i id="bossArm"></i></div></div>
   <div id="anuncio"></div>
   <div id="hudDir">
     <canvas id="minimapa"></canvas>
@@ -137,6 +164,9 @@
     <button class="tb granada" id="btnGranada" data-acao="granada">💣<span>0</span></button>
     <button class="tb kit" id="btnKit" data-acao="kit">✚<span>0</span></button>
     <button class="tb pular" data-acao="pular">⤒</button>
+    <button class="tb facao" id="btnFacao" data-acao="facao">🔪</button>
+    <button class="tb esquiva" id="btnEsquiva" data-acao="esquiva">»</button>
+    <button class="tb torreta" id="btnTorreta" data-acao="torreta">⚙<span>0</span></button>
   </div>
 
   <div id="pausa" class="overlay">

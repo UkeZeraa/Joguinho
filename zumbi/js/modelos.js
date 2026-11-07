@@ -120,49 +120,96 @@ export function criarArma(arma) {
 // ---------------- ZUMBIS ----------------
 const ROUPAS = [0x4a5a7a, 0x7a3a3a, 0x3a5a3a, 0x6a6a5a, 0x2a2a2a, 0x7a6a4a, 0x5a3a6a, 0x8a8a8a];
 
-export function criarZumbi(tipo) {
+const CORES_ROUPA_TIPO = {
+  chefe: 0x3a0a14, blindado: 0x3a4430, escudeiro: 0x1a2430, acougueiro: 0xc8c0b0, colosso: 0x2a2e28, rainha: 0x2a0a30,
+  espectro: 0x40505a, toxico: 0x4a5a20, gritador: 0x5a4a4a,
+};
+
+export function criarZumbi(tipo, opcoes = {}) {
   const def = ZUMBIS[tipo];
-  const pele = new THREE.MeshLambertMaterial({ color: def.pele });
-  const roupa = new THREE.MeshLambertMaterial({ color: tipo === 'chefe' ? 0x3a0a14 : ROUPAS[Math.floor(Math.random() * ROUPAS.length)] });
-  const calca = new THREE.MeshLambertMaterial({ color: tipo === 'chefe' ? 0x2a0a10 : 0x2a3040 });
+  const transparente = tipo === 'espectro';
+  const lambert = cor => new THREE.MeshLambertMaterial({ color: cor, transparent: transparente });
+  const pele = lambert(def.pele);
+  const roupa = lambert(CORES_ROUPA_TIPO[tipo] ?? ROUPAS[Math.floor(Math.random() * ROUPAS.length)]);
+  const calca = lambert(def.boss ? 0x1a1414 : tipo === 'blindado' || tipo === 'escudeiro' ? 0x2a3020 : 0x2a3040);
   const olho = new THREE.MeshBasicMaterial({ color: def.olho });
-  const sangue = new THREE.MeshLambertMaterial({ color: 0x5a0a0a });
-  const mats = [pele, roupa, calca, sangue];
+  const sangue = lambert(0x5a0a0a);
+  const metal = new THREE.MeshLambertMaterial({ color: 0x6a7078 });
+  const mats = [pele, roupa, calca, sangue, metal];
+  const ud = { mats, pele, olhoMat: olho };
 
   const g = new THREE.Group();
   const corpo = new THREE.Group();
   g.add(corpo);
 
-  const largura = tipo === 'inchado' ? 0.75 : tipo === 'corredor' ? 0.42 : 0.5;
-  const tronco = caixa(roupa, largura, 0.62, tipo === 'inchado' ? 0.55 : 0.28, 0, 1.12, 0);
-  corpo.add(tronco);
-  corpo.add(caixa(sangue, largura * 0.5, 0.2, 0.02, 0.06, 1.05, -(tipo === 'inchado' ? 0.28 : 0.15)));
+  const gordo = tipo === 'inchado' || tipo === 'toxico' || tipo === 'acougueiro';
+  const largura = gordo ? 0.75 : tipo === 'corredor' || tipo === 'gritador' ? 0.42 : tipo === 'colosso' ? 0.7 : 0.5;
+  const prof = gordo ? 0.55 : tipo === 'colosso' ? 0.45 : 0.28;
+  corpo.add(caixa(roupa, largura, 0.62, prof, 0, 1.12, 0));
+  corpo.add(caixa(sangue, largura * 0.5, 0.2, 0.02, 0.06, 1.05, -(prof / 2 + 0.01)));
 
   const cabeca = new THREE.Group();
   cabeca.position.set(0, 1.58, 0);
-  cabeca.add(caixa(pele, 0.3, 0.32, 0.3, 0, 0, 0));
+  const tamCab = tipo === 'gritador' ? 0.36 : 0.3;
+  cabeca.add(caixa(pele, tamCab, 0.32, 0.3, 0, 0, 0));
   cabeca.add(caixa(olho, 0.06, 0.04, 0.02, -0.07, 0.03, -0.155));
   cabeca.add(caixa(olho, 0.06, 0.04, 0.02, 0.07, 0.03, -0.155));
   cabeca.add(caixa(sangue, 0.14, 0.05, 0.02, 0, -0.08, -0.155));
-  if (tipo === 'cuspidor') cabeca.add(caixa(olho, 0.16, 0.08, 0.04, 0, -0.08, -0.16));
-  if (tipo === 'chefe') {
-    for (let i = -1; i <= 1; i++) {
-      const esp = caixa(olho, 0.05, 0.18, 0.05, i * 0.1, 0.22, 0.03);
-      esp.rotation.z = i * 0.3;
+  if (tipo === 'cuspidor' || tipo === 'toxico') cabeca.add(caixa(olho, 0.16, 0.08, 0.04, 0, -0.08, -0.16));
+  if (tipo === 'gritador') cabeca.add(caixa(new THREE.MeshBasicMaterial({ color: 0x200000 }), 0.16, 0.16, 0.04, 0, -0.07, -0.16));
+  if (tipo === 'chefe' || tipo === 'rainha') {
+    const n = tipo === 'rainha' ? 2 : 1;
+    for (let i = -n; i <= n; i++) {
+      const esp = caixa(olho, 0.05, tipo === 'rainha' ? 0.26 : 0.18, 0.05, i * 0.07, 0.22, 0.03);
+      esp.rotation.z = i * 0.28;
       cabeca.add(esp);
     }
   }
+  if (tipo === 'blindado') {
+    ud.capacete = new THREE.Group();
+    ud.capacete.add(caixa(metal, 0.36, 0.14, 0.36, 0, 0.13, 0));
+    ud.capacete.add(caixa(metal, 0.38, 0.03, 0.4, 0, 0.07, -0.02));
+    ud.capacete.add(caixa(new THREE.MeshBasicMaterial({ color: 0x101820 }), 0.3, 0.07, 0.02, 0, 0.03, -0.17));
+    cabeca.add(ud.capacete);
+  }
+  if (tipo === 'colosso') cabeca.add(caixa(metal, 0.36, 0.2, 0.36, 0, 0.08, 0));
   cabeca.rotation.z = (Math.random() - 0.5) * 0.4;
   corpo.add(cabeca);
 
-  if (tipo === 'inchado') {
-    for (let i = 0; i < 5; i++) {
-      corpo.add(caixa(new THREE.MeshBasicMaterial({ color: 0xc8d040 }), 0.12, 0.12, 0.12,
+  if (tipo === 'inchado' || tipo === 'toxico') {
+    const cor = tipo === 'toxico' ? 0x9cff3a : 0xc8d040;
+    for (let i = 0; i < 6; i++) {
+      corpo.add(caixa(new THREE.MeshBasicMaterial({ color: cor }), 0.12, 0.12, 0.12,
         (Math.random() - 0.5) * 0.7, 0.9 + Math.random() * 0.45, -0.28 + Math.random() * 0.05));
     }
   }
-  if (tipo === 'bruto' || tipo === 'chefe') {
-    corpo.add(caixa(pele, largura * 1.5, 0.22, 0.38, 0, 1.38, 0));
+  if (tipo === 'bruto' || tipo === 'chefe' || tipo === 'colosso' || tipo === 'acougueiro') {
+    corpo.add(caixa(tipo === 'colosso' ? metal : pele, largura * 1.5, 0.22, 0.38, 0, 1.38, 0));
+  }
+  // placas de armadura
+  if (tipo === 'blindado' || tipo === 'colosso') {
+    ud.placas = new THREE.Group();
+    ud.placas.add(caixa(metal, largura + 0.08, 0.5, 0.06, 0, 1.15, -(prof / 2 + 0.03)));
+    ud.placas.add(caixa(metal, largura + 0.08, 0.5, 0.06, 0, 1.15, prof / 2 + 0.03));
+    ud.placas.add(caixa(metal, 0.12, 0.12, prof + 0.1, -(largura / 2 + 0.06), 1.38, 0));
+    ud.placas.add(caixa(metal, 0.12, 0.12, prof + 0.1, largura / 2 + 0.06, 1.38, 0));
+    corpo.add(ud.placas);
+  }
+  if (tipo === 'colosso') {
+    // núcleo fraco nas costas
+    ud.nucleo = caixa(new THREE.MeshBasicMaterial({ color: 0xffa000 }), 0.22, 0.22, 0.06, 0, 1.2, prof / 2 + 0.08);
+    corpo.add(ud.nucleo);
+  }
+  if (tipo === 'acougueiro') {
+    corpo.add(caixa(new THREE.MeshLambertMaterial({ color: 0xd8d0c0 }), largura * 0.9, 0.7, 0.03, 0, 0.95, -(prof / 2 + 0.02)));
+    corpo.add(caixa(sangue, largura * 0.5, 0.3, 0.035, -0.1, 0.9, -(prof / 2 + 0.03)));
+  }
+  if (tipo === 'rainha') {
+    for (const lado of [-1, 1]) {
+      const asa = caixa(new THREE.MeshLambertMaterial({ color: 0x3a1a4a, transparent: true, opacity: 0.85, side: THREE.DoubleSide }), 0.9, 1.0, 0.03, lado * 0.6, 1.45, 0.25);
+      asa.rotation.y = lado * 0.5; asa.rotation.z = lado * -0.3;
+      corpo.add(asa);
+    }
   }
 
   function membro(mat, w, h, x, y) {
@@ -171,17 +218,73 @@ export function criarZumbi(tipo) {
     p.add(caixa(mat, w, h, w, 0, -h / 2, 0));
     return p;
   }
-  const bracoE = membro(pele, 0.14, 0.62, -(largura / 2 + 0.08), 1.4);
-  const bracoD = membro(pele, 0.14, 0.62, (largura / 2 + 0.08), 1.4);
-  const bracoL = tipo === 'bruto' || tipo === 'chefe' ? 0.24 : 0.14;
+  const bracoE = membro(pele, 0.14, tipo === 'rainha' ? 0.9 : 0.62, -(largura / 2 + 0.08), 1.4);
+  const bracoD = membro(pele, 0.14, tipo === 'rainha' ? 0.9 : 0.62, (largura / 2 + 0.08), 1.4);
+  const grosso = ['bruto', 'chefe', 'colosso', 'acougueiro'].includes(tipo);
+  const bracoL = grosso ? 0.24 : 0.14;
   bracoE.children[0].scale.x = bracoE.children[0].scale.z = bracoL;
   bracoD.children[0].scale.x = bracoD.children[0].scale.z = bracoL;
   const pernaE = membro(calca, 0.18, 0.8, -0.13, 0.8);
   const pernaD = membro(calca, 0.18, 0.8, 0.13, 0.8);
   corpo.add(bracoE, bracoD, pernaE, pernaD);
 
-  g.scale.setScalar(def.escala * (0.95 + Math.random() * 0.1));
-  g.userData = { corpo, cabeca, bracoE, bracoD, pernaE, pernaD, mats, pele };
+  if (tipo === 'acougueiro') {
+    // cutelo na mão direita
+    const cutelo = new THREE.Group();
+    cutelo.add(caixa(new THREE.MeshLambertMaterial({ color: 0x3a2010 }), 0.06, 0.06, 0.25, 0, -0.62, -0.05));
+    cutelo.add(caixa(new THREE.MeshStandardMaterial({ color: 0xb0b8c0, metalness: 0.8, roughness: 0.3 }), 0.03, 0.35, 0.45, 0, -0.62, -0.38));
+    bracoD.add(cutelo);
+  }
+  if (tipo === 'escudeiro') {
+    // escudo antimotim preso ao braço esquerdo, na frente do corpo
+    ud.escudo = new THREE.Group();
+    ud.escudo.add(caixa(new THREE.MeshLambertMaterial({ color: 0x20262e }), 0.85, 1.25, 0.06, 0, 0, 0));
+    ud.escudo.add(caixa(new THREE.MeshBasicMaterial({ color: 0x406080, transparent: true, opacity: 0.6 }), 0.6, 0.18, 0.07, 0, 0.38, 0));
+    ud.escudo.add(caixa(new THREE.MeshBasicMaterial({ color: 0xffffff }), 0.5, 0.06, 0.07, 0, -0.2, 0));
+    ud.escudo.position.set(0.05, 1.0, -0.45);
+    corpo.add(ud.escudo);
+  }
+  if (opcoes.elite) {
+    // brilho dourado e coroa
+    const ouro = new THREE.MeshBasicMaterial({ color: 0xffd040 });
+    cabeca.add(caixa(ouro, 0.32, 0.05, 0.32, 0, 0.2, 0));
+    for (const x of [-0.12, 0, 0.12]) cabeca.add(caixa(ouro, 0.05, 0.1, 0.05, x, 0.26, -0.13));
+  }
+
+  g.scale.setScalar(def.escala * (def.boss ? 1 : 0.95 + Math.random() * 0.1) * (opcoes.elite ? 1.15 : 1));
+  Object.assign(ud, { corpo, cabeca, bracoE, bracoD, pernaE, pernaD });
+  g.userData = ud;
+  return g;
+}
+
+// facão para a mão (primeira pessoa)
+export function criarFacao() {
+  const g = new THREE.Group();
+  const lamina = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, metalness: 0.9, roughness: 0.25 });
+  const cabo = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.8 });
+  g.add(caixa(cabo, 0.035, 0.035, 0.13, 0, 0, 0.02));
+  g.add(caixa(new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6 }), 0.07, 0.02, 0.02, 0, 0, -0.05));
+  g.add(caixa(lamina, 0.012, 0.055, 0.32, 0, 0.005, -0.22));
+  return g;
+}
+
+// torreta sentinela
+export function criarTorreta() {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshLambertMaterial({ color: 0x4a5058 });
+  const escuro = new THREE.MeshLambertMaterial({ color: 0x1a1c20 });
+  for (let i = 0; i < 3; i++) {
+    const perna = caixa(metal, 0.06, 0.9, 0.06, Math.cos(i * 2.1) * 0.3, 0.4, Math.sin(i * 2.1) * 0.3);
+    perna.rotation.z = Math.cos(i * 2.1) * 0.35; perna.rotation.x = -Math.sin(i * 2.1) * 0.35;
+    g.add(perna);
+  }
+  const topo = new THREE.Group();
+  topo.position.y = 0.95;
+  topo.add(caixa(metal, 0.4, 0.28, 0.5, 0, 0, 0));
+  topo.add(cano(escuro, 0.04, 0.6, 0, 0.02, -0.5));
+  topo.add(caixa(new THREE.MeshBasicMaterial({ color: 0x40ff80 }), 0.1, 0.05, 0.02, 0, 0.1, -0.26));
+  g.add(topo);
+  g.userData.topo = topo;
   return g;
 }
 

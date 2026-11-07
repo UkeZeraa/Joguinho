@@ -112,23 +112,56 @@ Pistola e Submetralhadora (secundárias); Fuzil, Escopeta, Sniper e Metralhadora
 
 ## Base (antes da raid)
 
-- **Equipamento:** escolha a arma primária e a secundária, o colete, as granadas e os kits médicos.
-  A arma aparece em 3D (arraste para girar) com os atributos, e você pode trocar a camuflagem.
+- **Equipamento:** escolha a arma primária e a secundária, o colete, as granadas, os kits médicos e as
+  torretas. A arma aparece em 3D (arraste para girar) com os atributos, e você pode trocar a camuflagem.
 - **Arsenal:** todas as suas armas filtradas por tier. Dá para desmontar as que não quer e ganhar grana.
 - **Loja:** caixas de armas (com roleta e as chances de cada tier), suprimentos, coletes e camuflagens.
-- **Raid:** três zonas: Subúrbio (fácil), Centro em Chamas e Laboratório X-13 (com mais chance de Mítico).
+- **Perícias:** cada nível dá 1 ponto para melhorar vida, resistência, regeneração, recarga,
+  headshot, facão, esquiva, velocidade e sorte. O XP vem dos abates, das extrações e das missões.
+- **Missões:** 3 contratos por vez (matar tipos de zumbi, headshots, facão, derrotar chefes,
+  extrair de uma zona, Sobrevivência...) com grana, XP e às vezes uma arma Épica ou melhor.
+- **Bestiário:** ficha de cada zumbi e chefe, com dica de como vencer e quantos você já abateu.
+- **Raid:** escolha o modo, a zona e os modificadores.
+
+## Modos, zonas e modificadores
+
+- **Raid:** ondas fixas com chefe no final e extração no heliponto.
+- **Sobrevivência:** ondas infinitas, com chefe a cada 5 ondas; depois de cada chefe, o helicóptero
+  espera 30 segundos para você extrair. O recorde fica salvo.
+- **Zonas:** Subúrbio → Centro em Chamas → Laboratório X-13 → **Base Militar Caída** → **Ninho da Rainha**.
+  As duas últimas são liberadas extraindo da zona anterior.
+- **Modificadores** (somam recompensa): Lua de Sangue (+60% de vida nos zumbis), Frenesi (mais rápidos),
+  Blindagem Total (todos de colete), Caçada de Elite (zumbis dourados com 3× vida que sempre soltam arma)
+  e Escuridão.
+- Durante as ondas cai **suprimento aéreo** (sinal vermelho) com uma arma de tier melhor.
+
+## Inimigos
+
+| Zumbi | Como funciona |
+| --- | --- |
+| Errante, Corredor, Cuspidor, Inchado, Brutamontes | Os básicos |
+| **Rastejante** | Anda pelo chão, difícil de acertar |
+| **Blindado** | Colete e capacete: as balas quase não passam. Explosões e armas Perfurantes quebram a armadura; fogo ignora |
+| **Escudeiro** | Escudo antimotim que bloqueia tiros de frente. Mire na cabeça, pegue pelos lados, use granada ou facão |
+| **Gritador** | Fica longe e grita: deixa a horda mais rápida e forte e chama reforços |
+| **Espectro** | Quase invisível até chegar perto (só os olhos brilham) |
+| **Tóxico** | Solta nuvens de gás venenoso |
+| **Elite** | Qualquer zumbi dourado: 3× vida, mais forte, sempre solta arma |
+
+**Chefes:** Açougueiro (investida com cutelo; fica tonto se bater numa parede), Abominação (fica furiosa
+com metade da vida, chama corredores e cospe ácido), Colosso Blindado (ondas de choque que você precisa
+**pular**; o núcleo nas costas leva dano crítico) e Rainha Infectada (rajadas de ácido e invoca a ninhada).
 
 ## Na raid
 
-- Zumbis: Errante, Corredor, Cuspidor (ataca de longe), Inchado (explode), Brutamontes e,
-  na última onda, a **Abominação** (chefe que solta arma Épica ou melhor).
-- Barris vermelhos explodem com tiros. Os zumbis soltam grana, munição, vida e armas (com um feixe da cor do tier).
+- Além das armas: **facão** (corpo a corpo, empurra os zumbis), **esquiva** (avanço rápido em que
+  você não leva dano) e **torreta** (atira sozinha por 30 s).
 - **PC:** WASD andar · mouse mirar · clique atirar · botão direito mirar (ADS) · Shift correr ·
-  Espaço pular · R recarregar · Q/1/2/rodinha trocar arma · G granada · F kit médico · Esc pausa.
+  Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2/rodinha trocar arma ·
+  G granada · F kit médico · Esc pausa.
   Se o mouse não ficar preso na tela (ex.: dentro de outra página), segure o botão e arraste para olhar.
 - **Celular:** o lado esquerdo da tela é o joystick, arraste o lado direito para olhar, segure 🔥 para
-  atirar (ele também gira a câmera enquanto você arrasta) e ⤒ para pular.
-- **Pulo:** dá para subir em barreiras e caixas baixas.
+  atirar (ele também gira a câmera enquanto você arrasta), ⤒ pula, 🔪 facão, » esquiva e ⚙ torreta.
 - **Opções** (na aba Raid e na pausa): sensibilidade da câmera, **mira assistida** (a mira gruda nos
   zumbis) e **tiro automático** (atira sozinho quando a mira fica vermelha em cima de um zumbi).
   As duas vêm ligadas no celular.
