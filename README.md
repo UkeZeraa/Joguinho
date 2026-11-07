@@ -166,8 +166,30 @@ com metade da vida, chama corredores e cospe ácido), Colosso Blindado (ondas de
   zumbis) e **tiro automático** (atira sozinho quando a mira fica vermelha em cima de um zumbi).
   As duas vêm ligadas no celular.
 
-O progresso fica salvo no navegador (localStorage). O Three.js está em `zumbi/lib/` (licença MIT),
-então o jogo não depende de CDN.
+## Gráficos
+
+- **Armas detalhadas:** trilhos, miras de ferro, red dot, holográfica e lunetas, quebra-chamas, cartuchos na lateral
+  da escopeta, cinta de munição na metralhadora, metal com reflexo e camuflagens com padrão (deserto, floresta,
+  digital, sangue, gelo, ouro gravado, obsidiana com veias brilhando). Cada tier acrescenta peças: Raro ganha red
+  dot, Épico holográfica e lanterna com laser, Lendário trilhos de energia e runa flutuante, Mítico núcleo de
+  cristal e anéis girando no cano.
+- **Primeira pessoa:** mãos com luva e mangas camufladas, ferrolho que recua a cada tiro, pump da escopeta,
+  carregador que cai na recarga, cápsulas ejetadas, clarão e fumaça.
+- **Zumbis:** corpo com joelhos, cotovelos, mãos com dedos e mandíbula que mexe; roupas rasgadas, costelas
+  expostas, feridas, cabelos e calçados variados; olhos brilhando. Cada tipo tem visual próprio (soldado com
+  capacete e óculos, policial com escudo "POLÍCIA", máscara de gás, avental hospitalar, açougueiro com capuz e
+  cutelo, colosso blindado, rainha com asas e garras). Headshot fatal estoura a cabeça; os corpos caem de jeitos
+  diferentes e deixam poça de sangue.
+- **Cenário:** ruas com faixas, calçadas, bueiros e poças que refletem a luz; prédios com janelas acesas, lojas
+  saqueadas, toldos e letreiros de neon piscando; viatura com sirene, sacos de areia, caçambas, barris com fogo;
+  céu com lua, nuvens e estrelas; clima por zona (cinzas, brasas, esporos, chuva com relâmpagos) e névoa rasteira.
+- **Efeitos:** brilho (bloom), correção de cor, vinheta, granulação, tela dessaturada com pouca vida e sombras na
+  qualidade Alta. A qualidade (Baixa, Média ou Alta) fica nas opções da aba Raid; use **Baixa** em celulares fracos.
+- **Interface:** tema militar com fontes condensadas, fundo animado na base, painéis com cantoneiras, brilho nas
+  cartas raras, minimapa redondo, vida segmentada e indicador de direção do dano.
+
+O progresso fica salvo no navegador (localStorage). O Three.js (com os efeitos de pós-processamento) está em
+`zumbi/lib/` (licença MIT), então o jogo não depende de CDN.
 
 ## Testar no Expo Go 📱
 

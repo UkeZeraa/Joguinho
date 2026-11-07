@@ -6,6 +6,7 @@ import {
   xpProximo, gerarMissao, zonaLiberada,
 } from './dados.js';
 import { criarArma, criarZumbi } from './modelos.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { iniciarAudio, som, setSom } from './audio.js';
 import { iniciarRaid } from './raid.js';
 
@@ -31,7 +32,9 @@ while (save.missoes.length < 3) save.missoes.push(gerarMissao(save));
 const thumbR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 thumbR.setSize(240, 120);
 thumbR.outputColorSpace = THREE.SRGBColorSpace;
+thumbR.toneMapping = THREE.ACESFilmicToneMapping;
 const thumbCena = new THREE.Scene();
+{ const pm = new THREE.PMREMGenerator(thumbR); thumbCena.environment = pm.fromScene(new RoomEnvironment(thumbR), 0.04).texture; pm.dispose(); }
 thumbCena.add(new THREE.AmbientLight(0xffffff, 0.9));
 const tl = new THREE.DirectionalLight(0xffffff, 2.5); tl.position.set(1, 2, 2); thumbCena.add(tl);
 const thumbCam = new THREE.PerspectiveCamera(30, 2, 0.1, 20);
@@ -69,7 +72,10 @@ const prevCanvas = $('preview');
 const prevR = new THREE.WebGLRenderer({ canvas: prevCanvas, antialias: true, alpha: true });
 prevR.setPixelRatio(Math.min(devicePixelRatio, 2));
 prevR.outputColorSpace = THREE.SRGBColorSpace;
+prevR.toneMapping = THREE.ACESFilmicToneMapping;
+prevR.toneMappingExposure = 1.1;
 const prevCena = new THREE.Scene();
+{ const pm = new THREE.PMREMGenerator(prevR); prevCena.environment = pm.fromScene(new RoomEnvironment(prevR), 0.04).texture; pm.dispose(); }
 prevCena.add(new THREE.AmbientLight(0xffffff, 0.6));
 const pl = new THREE.DirectionalLight(0xffffff, 2.5); pl.position.set(2, 3, 2); prevCena.add(pl);
 const pl2 = new THREE.DirectionalLight(0xff9070, 1.0); pl2.position.set(-2, 0, -2); prevCena.add(pl2);
@@ -86,7 +92,7 @@ function mostrarPreview(arma) {
   prevPiv.rotation.set(0, 0, 0);
   prevPiv.updateMatrixWorld(true);
   prevCam.aspect = 1.6;
-  const d = enquadrar(prevModelo, prevCam, 1.25);
+  const d = enquadrar(prevModelo, prevCam, 0.9);
   prevCam.userData.dist = d;
   prevLuzTier.color.set(TIERS[arma.tier].cor);
   prevLuzTier.intensity = 1 + arma.tier * 0.8;
@@ -106,7 +112,7 @@ function loopPreview(t) {
   prevCam.position.set(0, d * 0.18, d); prevCam.lookAt(0, 0, 0);
   if (prevAuto) prevGiro += 0.008;
   prevPiv.rotation.y = prevGiro + Math.PI / 2;
-  prevModelo.traverse(o => { if (o.userData.pulsa) o.scale.setScalar(0.03 * (1 + Math.sin(t / 160) * 0.35)); });
+  prevModelo.userData.animar?.(t / 1000);
   prevR.render(prevCena, prevCam);
 }
 requestAnimationFrame(loopPreview);
@@ -123,7 +129,7 @@ function ordenarInv() { save.inv.sort((a, b) => b.tier - a.tier || a.tipo.locale
 
 function cartaArma(a, extras = '') {
   const t = TIERS[a.tier];
-  return `<div class="carta ${a.tier === 5 ? 'mitico' : ''}" style="--cor:${t.cor}" data-uid="${a.uid}">
+  return `<div class="carta t${a.tier} ${a.tier === 5 ? 'mitico' : ''}" style="--cor:${t.cor}" data-uid="${a.uid}">
     ${equipadaEm(a.uid) ? '<span class="eqTag">EQUIPADA</span>' : ''}
     <img src="${miniatura(a)}" alt="">
     <div class="t">${t.nome} · ${TIPOS[a.tipo].nome}</div>
@@ -616,10 +622,13 @@ function renderOpcoes() {
     el.innerHTML = `
       <label>Sensibilidade da câmera <input type="range" min="0.3" max="2.5" step="0.1" value="${o.sens}" data-op="sens"></label>
       <label><span>Mira assistida<br><small>a mira gruda nos zumbis</small></span><input type="checkbox" data-op="assist" ${assist ? 'checked' : ''}></label>
-      <label><span>Tiro automático<br><small>atira sozinho com a mira no zumbi</small></span><input type="checkbox" data-op="autoTiro" ${auto ? 'checked' : ''}></label>`;
+      <label><span>Tiro automático<br><small>atira sozinho com a mira no zumbi</small></span><input type="checkbox" data-op="autoTiro" ${auto ? 'checked' : ''}></label>
+      <label><span>Qualidade gráfica<br><small>vale a partir da próxima raid</small></span><select data-op="qualidade">
+        ${[['baixo', 'Baixa (celular fraco)'], ['medio', 'Média'], ['alto', 'Alta (sombras)']].map(([v, n]) => `<option value="${v}" ${(o.qualidade || (mobile ? 'medio' : 'alto')) === v ? 'selected' : ''}>${n}</option>`).join('')}
+      </select></label>`;
     el.querySelectorAll('[data-op]').forEach(inp => inp.addEventListener('input', () => {
       const k = inp.dataset.op;
-      o[k] = inp.type === 'checkbox' ? inp.checked : +inp.value;
+      o[k] = inp.type === 'checkbox' ? inp.checked : inp.tagName === 'SELECT' ? inp.value : +inp.value;
       gravar();
       if (inp.type === 'checkbox') renderOpcoes();
     }));
@@ -646,5 +655,30 @@ function aviso(msg, bom) {
 }
 
 document.addEventListener('pointerdown', () => iniciarAudio(), { once: true });
-$('carregando').remove();
+// fundo animado da base: silhueta da cidade com janelas e brasas subindo
+(function fundoBase() {
+  let x = 0, svg = '';
+  while (x < 1600) {
+    const w = 40 + Math.random() * 90, h = 80 + Math.random() * 260;
+    svg += `<rect x="${x}" y="${400 - h}" width="${w}" height="${h}" fill="#07070a"/>`;
+    for (let wy = 400 - h + 12; wy < 390; wy += 18) for (let wx = x + 8; wx < x + w - 10; wx += 14) {
+      const r = Math.random();
+      if (r < 0.06) svg += `<rect x="${wx}" y="${wy}" width="6" height="8" fill="${r < 0.015 ? '#ff5030' : '#f0b050'}" opacity="${0.5 + Math.random() * 0.5}"/>`;
+    }
+    if (Math.random() < 0.25) svg += `<rect x="${x + w / 2}" y="${400 - h - 30}" width="2" height="30" fill="#07070a"/>`;
+    x += w + Math.random() * 6;
+  }
+  $('skyline').innerHTML = `<svg viewBox="0 0 1600 400" preserveAspectRatio="xMidYMax slice" width="100%" height="100%">${svg}</svg>`;
+  const br = $('brasas');
+  for (let i = 0; i < 28; i++) {
+    const e = document.createElement('i');
+    e.style.left = Math.random() * 100 + '%';
+    e.style.animationDelay = -Math.random() * 12 + 's';
+    e.style.animationDuration = 8 + Math.random() * 8 + 's';
+    e.style.setProperty('--dx', (Math.random() * 120 - 60) + 'px');
+    br.appendChild(e);
+  }
+})();
+$('carregando').classList.add('saindo');
+setTimeout(() => $('carregando').remove(), 600);
 render();

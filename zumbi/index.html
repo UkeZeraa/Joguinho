@@ -7,15 +7,19 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Apocalipse Z — Raids</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js", "three/addons/": "./lib/jsm/" } }</script>
 </head>
 <body>
 
 <!-- ===================== BASE / LOBBY ===================== -->
 <div id="lobby">
+  <div id="fundo"><div class="lua"></div><div id="skyline"></div><div class="nevoa n1"></div><div class="nevoa n2"></div><div id="brasas"></div><div class="scan"></div></div>
   <header>
-    <div class="logo">APOCALIPSE <b>Z</b><small>RAIDS</small></div>
+    <div class="logo"><span class="bio">☣</span><span class="nome">APOCALIPSE<b>Z</b></span><small>RAIDS · SOBREVIVA À HORDA</small></div>
     <div class="carteira"><span id="grana">$0</span></div>
   </header>
   <nav id="abas">
@@ -128,6 +132,7 @@
   <div id="vinheta"></div>
   <div id="danoNums"></div>
   <div id="mira"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="dirDano"></div>
   <div id="hitmarker"></div>
 
   <div id="hudTopo">
@@ -181,7 +186,7 @@
   <div id="gire">Gire o celular para jogar deitado ↻</div>
 </div>
 
-<div id="carregando">Carregando...</div>
+<div id="carregando"><div class="logo"><span class="bio">☣</span><span class="nome">APOCALIPSE<b>Z</b></span></div><div class="barraCarga"><i></i></div><p>Preparando o apocalipse...</p></div>
 <script type="module" src="js/lobby.js"></script>
 </body>
 </html>

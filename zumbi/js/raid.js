@@ -1,7 +1,8 @@
 // Raid em primeira pessoa: mapa, jogador, armas, zumbis, ondas e extração.
 import * as THREE from 'three';
 import { TIPOS, TIERS, ZUMBIS, BOSS_PESOS, MODIFICADORES, stats, rolarTier, novaArma, fmt } from './dados.js';
-import { criarArma, criarZumbi, criarFacao, criarTorreta, texChao, texPredio, texCaixa, texBrilho } from './modelos.js';
+import { criarArma, criarZumbi, criarFacao, criarTorreta, texCaixa, texBrilho, mesclar } from './modelos.js';
+import * as VIS from './visual.js';
 import { som } from './audio.js';
 
 const L = 42;            // metade do tamanho do mapa
@@ -25,6 +26,7 @@ function pegarRenderer(canvas) {
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const rand = (a, b) => a + Math.random() * (b - a);
+const escolher = a => a[Math.floor(Math.random() * a.length)];
 
 // Raio x caixa alinhada (slab). Retorna t ou -1
 function raioCaixa(ox, oy, oz, dx, dy, dz, minx, miny, minz, maxx, maxy, maxz, tmax) {
@@ -61,11 +63,13 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   const bonusMods = MODIFICADORES.filter(m => mod.has(m.id)).reduce((a, m) => a + m.bonus, 0);
   const recompensa = zona.recompensa * (1 + bonusMods);
   const TOTAL_ONDAS = sobrevivencia ? Infinity : zona.ondas;
+  const qual = VIS.qualidade(opcoes, mobile);
+  const alto = qual === 'alto';
   const cena = new THREE.Scene();
   const corCeu = mod.has('lua') ? 0x2a0404 : zona.ceu;
   const corNeblina = mod.has('lua') ? 0x3a0808 : zona.neblina;
-  cena.background = new THREE.Color(corCeu);
-  cena.fog = new THREE.FogExp2(corNeblina, mod.has('escuridao') ? 0.07 : 0.032);
+  cena.background = new THREE.Color(corNeblina);
+  cena.fog = new THREE.FogExp2(corNeblina, mod.has('escuridao') ? 0.07 : 0.03);
 
   const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 200);
   camera.rotation.order = 'YXZ';
@@ -73,46 +77,63 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
 
   // Cena separada só para a arma na mão (não atravessa paredes)
   const vmCena = new THREE.Scene();
-  const vmCam = new THREE.PerspectiveCamera(65, 1, 0.01, 10);
+  const vmCam = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
   vmCena.add(vmCam);
-  vmCena.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const vmSol = new THREE.DirectionalLight(0xffffff, 2.2);
-  vmSol.position.set(0.5, 1, 0.6);
+  vmCena.add(new THREE.AmbientLight(0xffffff, 0.35));
+  vmCena.add(new THREE.HemisphereLight(mod.has('lua') ? 0xff8070 : zona.luz, 0x201810, 0.6));
+  const vmSol = new THREE.DirectionalLight(0xfff0e0, 2.4);
+  vmSol.position.set(0.6, 1, 0.4);
   vmCena.add(vmSol);
-  const vmLuzTier = new THREE.PointLight(0xffffff, 0.6, 1.2, 1);
+  const vmLuzTier = new THREE.PointLight(0xffffff, 0.8, 1.4, 1);
   vmLuzTier.position.set(0.2, -0.1, -0.5);
   vmCena.add(vmLuzTier);
+  const vmLuzTiro = new THREE.PointLight(0xffb060, 0, 2, 1);
+  vmLuzTiro.position.set(0.15, -0.1, -0.9);
+  vmCena.add(vmLuzTiro);
 
   // ---------- luzes ----------
-  cena.add(new THREE.HemisphereLight(mod.has('lua') ? 0xff4030 : zona.luz, 0x202020, mod.has('escuridao') ? 0.25 : 0.55));
-  const lua = new THREE.DirectionalLight(zona.luz, 0.45);
-  lua.position.set(-20, 40, -10);
-  cena.add(lua);
-  const lanterna = new THREE.SpotLight(0xfff4dd, mod.has('escuridao') ? 30 : 60, mod.has('escuridao') ? 22 : 40, 0.48, 0.55, 1.2);
+  const luaDir = new THREE.Vector3(-0.45, 0.55, -0.7).normalize();
+  const hemi = new THREE.HemisphereLight(mod.has('lua') ? 0xff4030 : zona.luz, 0x2a2420, mod.has('escuridao') ? 0.3 : 0.75);
+  cena.add(hemi);
+  const lua = new THREE.DirectionalLight(mod.has('lua') ? 0xff7060 : zona.luz, alto ? 0.8 : 0.5);
+  lua.position.copy(luaDir).multiplyScalar(50);
+  cena.add(lua); cena.add(lua.target);
+  if (alto) {
+    lua.castShadow = true;
+    lua.shadow.mapSize.set(2048, 2048);
+    Object.assign(lua.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 120 });
+    lua.shadow.bias = -0.0006;
+  }
+  const lanterna = new THREE.SpotLight(0xfff4dd, mod.has('escuridao') ? 18 : 30, mod.has('escuridao') ? 22 : 40, 0.5, 0.6, 1.4);
   lanterna.position.set(0.15, -0.1, 0);
   camera.add(lanterna);
   const alvoLanterna = new THREE.Object3D();
   alvoLanterna.position.set(0, -0.05, -5);
   camera.add(alvoLanterna);
   lanterna.target = alvoLanterna;
+  if (alto) { lanterna.castShadow = true; lanterna.shadow.mapSize.set(512, 512); lanterna.shadow.bias = -0.0008; lanterna.shadow.camera.near = 0.5; }
   const luzTiro = new THREE.PointLight(0xffc070, 0, 14, 1.5);
   camera.add(luzTiro);
 
   const descartaveis = [];
   const reg = o => { descartaveis.push(o); return o; };
+  const sombra = (o, recebe = true) => { if (alto) o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = recebe; } }); return o; };
+
+  // céu, clima e névoa
+  const nCeu = new THREE.Color(corNeblina);
+  const ceu = VIS.criarCeu(cena, new THREE.Color(corCeu).multiplyScalar(0.6), nCeu.clone().multiplyScalar(1.3), nCeu.clone().multiplyScalar(1.6), luaDir);
+  const clima = VIS.criarClima(cena, zona.id, qual, mod.has('lua'));
+  const nevoa = VIS.criarNevoa(cena, new THREE.Color(corNeblina).multiplyScalar(2.2).getHex(), qual);
+  const marcas = VIS.criarMarcas(cena, qual);
+  let relampago = 0, proxRelampago = rand(6, 14);
 
   // ---------- mapa ----------
   const obst = [];      // {minx,maxx,minz,maxz,h,tipo,mesh}
-  const chaoTex = reg(texChao(zona.chao));
-  chaoTex.repeat.set(L / 4, L / 4);
-  const chao = new THREE.Mesh(new THREE.PlaneGeometry(L * 2, L * 2), new THREE.MeshLambertMaterial({ map: chaoTex }));
-  chao.rotation.x = -Math.PI / 2;
-  cena.add(chao);
-
-  const texPredios = ['#5a5550', '#4a4e58', '#6a5a48', '#3e4440'].map(c => reg(texPredio(c)));
   const tCaixa = reg(texCaixa());
   const matCaixa = new THREE.MeshLambertMaterial({ map: tCaixa });
   const geoCaixa = new THREE.BoxGeometry(1, 1, 1);
+  const matVC = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }); // peças mescladas com cor por vértice
+  const malhaVC = (partes, mat = matVC) => sombra(new THREE.Mesh(mesclar(partes), mat));
 
   function addObst(cx, cz, w, d, h, tipo, mesh) {
     const o = { minx: cx - w / 2, maxx: cx + w / 2, minz: cz - d / 2, maxz: cz + d / 2, h, tipo, mesh };
@@ -127,70 +148,143 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     }
     return Math.abs(cx) + w / 2 < L - 9 && Math.abs(cz) + d / 2 < L - 9;
   }
-  function predio(cx, cz, w, d, h) {
-    const t = texPredios[Math.floor(Math.random() * texPredios.length)].clone();
-    t.needsUpdate = true;
-    t.repeat.set(Math.max(1, Math.round(Math.max(w, d) / 5)), Math.max(1, Math.round(h / 8)));
-    reg(t);
-    const m = new THREE.Mesh(geoCaixa, new THREE.MeshLambertMaterial({ map: t }));
+
+  // prédios com fachadas, telhado, lojas e letreiros
+  const fachadas = [0, 1, 2, 3, 4].map(i => { const f = VIS.texFachada(i); reg(f.map); reg(f.emissiveMap); return f; });
+  const texTeto = reg(VIS.texTelhado());
+  const matTeto = new THREE.MeshLambertMaterial({ map: texTeto });
+  const texLojas = [VIS.texLoja(), VIS.texLoja(), VIS.texLoja()].map(reg);
+  const NOMES = { suburbio: ['FARMÁCIA', 'MERCADO', 'BAR', 'LANCHES', 'PADARIA'], centro: ['HOTEL', 'CINEMA', 'BAR 24H', 'BANCO', 'BOATE'],
+    lab: ['X-13', 'BIOLAB', 'SETOR C', 'QUARENTENA'], base: ['QG', 'ARSENAL', 'ENFERMARIA', 'HANGAR'], ninho: ['HOSPITAL', 'IGREJA', 'MOTEL', 'ABRIGO'] }[zona.id] || ['BAR'];
+  const CORES_NEON = ['#ff3a60', '#40e0ff', '#ffd040', '#60ff80', '#ff60ff', '#ff8020'];
+  const neons = [];
+  let nLetreiros = 0;
+  function matFachada(i, rx, ry) {
+    const f = fachadas[i];
+    const map = f.map.clone(), em = f.emissiveMap.clone();
+    map.needsUpdate = em.needsUpdate = true;
+    map.repeat.set(rx, ry); em.repeat.set(rx, ry);
+    reg(map); reg(em);
+    return new THREE.MeshLambertMaterial({ map, emissiveMap: em, emissive: 0xffffff, emissiveIntensity: mod.has('escuridao') ? 0.6 : 1 });
+  }
+  function predio(cx, cz, w, d, h, faces) {
+    const est = Math.floor(Math.random() * fachadas.length);
+    const ry = Math.max(1, Math.round(h / 9)), mx = matFachada(est, Math.max(1, Math.round(d / 7)), ry), mz = matFachada(est, Math.max(1, Math.round(w / 7)), ry);
+    const m = new THREE.Mesh(geoCaixa, [mx, mx, matTeto, matTeto, mz, mz]);
     m.scale.set(w, h, d);
     m.position.set(cx, h / 2, cz);
-    cena.add(m);
+    cena.add(sombra(m));
     addObst(cx, cz, w, d, h, 'predio', m);
+    // mureta e coisas no telhado
+    const pt = [];
+    const cor = 0x3a3836;
+    pt.push({ w: w, h: 0.6, d: 0.25, x: 0, y: h + 0.3, z: -d / 2 + 0.12, cor }, { w: w, h: 0.6, d: 0.25, x: 0, y: h + 0.3, z: d / 2 - 0.12, cor },
+      { w: 0.25, h: 0.6, d: d, x: -w / 2 + 0.12, y: h + 0.3, z: 0, cor }, { w: 0.25, h: 0.6, d: d, x: w / 2 - 0.12, y: h + 0.3, z: 0, cor });
+    for (let i = 0; i < Math.floor(rand(1, 4)); i++) pt.push({ w: rand(0.8, 1.6), h: rand(0.6, 1.0), d: rand(0.8, 1.4), x: rand(-w / 3, w / 3), y: h + 0.4, z: rand(-d / 3, d / 3), cor: 0x6a6e72 });
+    if (Math.random() < 0.4) pt.push({ g: 'cil', w: 1.6, h: 1.8, d: 1.6, x: rand(-w / 4, w / 4), y: h + 1.6, z: rand(-d / 4, d / 4), cor: 0x4a3a2a }, { w: 0.1, h: 1.2, d: 0.1, x: 0, y: h + 0.6, z: 0, cor: 0x2a2a2a });
+    if (Math.random() < 0.3) pt.push({ w: 0.08, h: 3, d: 0.08, x: rand(-w / 3, w / 3), y: h + 1.5, z: rand(-d / 3, d / 3), cor: 0x8a8a8a });
+    const topo = malhaVC(pt);
+    topo.position.set(cx, 0, cz);
+    cena.add(topo);
+    // lojas no térreo e letreiros de neon nas faces voltadas para a rua
+    for (const [nx, nz] of faces) {
+      const larg = Math.min(nx ? d : w, 8);
+      const loja = new THREE.Mesh(new THREE.PlaneGeometry(larg, 3.4), new THREE.MeshLambertMaterial({ map: escolher(texLojas) }));
+      loja.position.set(cx + nx * (w / 2 + 0.02), 1.7, cz + nz * (d / 2 + 0.02));
+      loja.rotation.y = Math.atan2(nx, nz);
+      cena.add(loja);
+      const toldo = new THREE.Mesh(geoCaixa, new THREE.MeshLambertMaterial({ color: escolher([0x8a2020, 0x204a8a, 0x2a6a2a, 0x7a5a20]) }));
+      toldo.scale.set(nx ? 1.2 : larg, 0.12, nz ? 1.2 : larg);
+      toldo.position.set(cx + nx * (w / 2 + 0.6), 3.55, cz + nz * (d / 2 + 0.6));
+      toldo.rotation[nx ? 'z' : 'x'] = (nx || nz) * -0.25;
+      cena.add(toldo);
+      if (nLetreiros < (qual === 'baixo' ? 4 : 9) && Math.random() < 0.7) {
+        nLetreiros++;
+        const corN = escolher(CORES_NEON);
+        const placa = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: reg(VIS.texLetreiro(escolher(NOMES), corN)), toneMapped: false }));
+        placa.position.set(cx + nx * (w / 2 + 0.05), 4.3, cz + nz * (d / 2 + 0.05));
+        placa.rotation.y = Math.atan2(nx, nz);
+        cena.add(placa);
+        neons.push({ m: placa, pisca: Math.random() < 0.45, t: rand(0, 5) });
+      }
+    }
   }
   // borda da cidade
   for (const lado of [0, 1, 2, 3]) {
     let p = -L;
+    const face = [[0, 1], [0, -1], [1, 0], [-1, 0]][lado];
     while (p < L) {
       const larg = Math.min(rand(8, 14), L - p);
       const prof = rand(7, 10);
-      const h = rand(7, 20);
+      const h = rand(7, 22);
       const meio = p + larg / 2;
-      if (lado === 0) predio(meio, -L + prof / 2, larg, prof, h);
-      if (lado === 1) predio(meio, L - prof / 2, larg, prof, h);
-      if (lado === 2) predio(-L + prof / 2, meio, prof, larg, h);
-      if (lado === 3) predio(L - prof / 2, meio, prof, larg, h);
+      const faces = Math.abs(meio) < 30 && Math.random() < 0.55 ? [face] : [];
+      if (lado === 0) predio(meio, -L + prof / 2, larg, prof, h, faces);
+      if (lado === 1) predio(meio, L - prof / 2, larg, prof, h, faces);
+      if (lado === 2) predio(-L + prof / 2, meio, prof, larg, h, faces);
+      if (lado === 3) predio(L - prof / 2, meio, prof, larg, h, faces);
       p += larg;
     }
   }
   // quarteirões internos
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) predio(sx * 17, sz * 17, rand(8, 11), rand(8, 11), rand(8, 16));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) predio(sx * 17, sz * 17, rand(8, 11), rand(8, 11), rand(8, 18), [[-sx, 0], [0, -sz]]);
 
-  // carros
-  const coresCarro = [0x7a1a1a, 0x1a3a6a, 0x2a2a2a, 0x8a8a8a, 0x5a5a20, 0x1a4a2a, 0xa06010];
-  const matVidro = new THREE.MeshLambertMaterial({ color: 0x0a0e14 });
-  const matPneu = new THREE.MeshLambertMaterial({ color: 0x0b0b0b });
-  const geoRoda = new THREE.CylinderGeometry(0.36, 0.36, 0.25, 10);
+  // carros detalhados (peças mescladas)
+  const coresCarro = [0x7a1a1a, 0x1a3a6a, 0x2a2a2a, 0x8a8a8a, 0x5a5a20, 0x1a4a2a, 0xa06010, 0xd0d0d0, 0x3a1a4a];
   const fogos = [];
+  const piscas = [];
   function carro(cx, cz, giro, queimado) {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({ color: queimado ? 0x1a1410 : coresCarro[Math.floor(Math.random() * coresCarro.length)] });
-    const base = new THREE.Mesh(geoCaixa, mat); base.scale.set(4.2, 0.75, 1.9); base.position.y = 0.68; g.add(base);
-    const cab = new THREE.Mesh(geoCaixa, mat); cab.scale.set(2.2, 0.6, 1.75); cab.position.set(-0.2, 1.35, 0); g.add(cab);
-    const vid = new THREE.Mesh(geoCaixa, matVidro); vid.scale.set(2.25, 0.45, 1.8); vid.position.set(-0.2, 1.36, 0); g.add(vid);
-    for (const [x, z] of [[1.3, 0.85], [-1.3, 0.85], [1.3, -0.85], [-1.3, -0.85]]) {
-      const r = new THREE.Mesh(geoRoda, matPneu); r.rotation.x = Math.PI / 2; r.position.set(x, 0.36, z); g.add(r);
+    const cor = queimado ? 0x1c1612 : escolher(coresCarro), vidro = queimado ? 0x050505 : 0x0e141c, preto = 0x111111, cromo = queimado ? 0x2a2a2a : 0x9a9a9a;
+    const p = [];
+    p.push({ w: 4.2, h: 0.55, d: 1.85, x: 0, y: 0.6, cor }, { w: 4.25, h: 0.12, d: 1.88, x: 0, y: 0.35, cor: preto });
+    p.push({ w: 2.2, h: 0.55, d: 1.7, x: -0.25, y: 1.15, cor }, { w: 2.25, h: 0.4, d: 1.72, x: -0.25, y: 1.17, cor: vidro });
+    p.push({ w: 0.6, h: 0.45, d: 1.6, x: 0.95, y: 1.05, rz: 0.8, cor: vidro }, { w: 0.5, h: 0.4, d: 1.6, x: -1.45, y: 1.05, rz: -0.7, cor: vidro });
+    p.push({ w: 0.15, h: 0.25, d: 1.9, x: 2.12, y: 0.55, cor: cromo }, { w: 0.15, h: 0.25, d: 1.9, x: -2.12, y: 0.55, cor: cromo });
+    for (const s of [-1, 1]) {
+      p.push({ w: 0.06, h: 0.12, d: 0.35, x: 2.18, y: 0.72, z: s * 0.65, cor: queimado ? preto : 0xf0f0d0 });
+      p.push({ w: 0.06, h: 0.12, d: 0.3, x: -2.18, y: 0.72, z: s * 0.65, cor: queimado ? preto : 0x9a1010 });
+      p.push({ w: 0.02, h: 0.4, d: 0.02, x: 0.2, y: 0.75, z: s * 0.93, cor: preto }, { w: 0.02, h: 0.4, d: 0.02, x: -0.8, y: 0.75, z: s * 0.93, cor: preto });
+      p.push({ w: 0.12, h: 0.1, d: 0.12, x: 0.55, y: 1.0, z: s * 1.0, cor });
+      for (const x of [1.3, -1.3]) {
+        p.push({ g: 'cil', w: 0.72, h: 0.26, d: 0.72, x, y: 0.36, z: s * 0.85, rx: Math.PI / 2, cor: preto });
+        p.push({ g: 'cil', w: 0.4, h: 0.27, d: 0.4, x, y: 0.36, z: s * 0.85, rx: Math.PI / 2, cor: cromo });
+      }
     }
-    g.position.set(cx, 0, cz);
-    g.rotation.y = giro ? Math.PI / 2 : 0;
-    g.rotation.y += rand(-0.05, 0.05);
-    cena.add(g);
-    addObst(cx, cz, giro ? 1.9 : 4.2, giro ? 4.2 : 1.9, 1.65, 'carro', g);
+    if (!queimado && Math.random() < 0.5) p.push({ w: 0.9, h: 0.05, d: 0.7, x: 1.3, y: 0.9, z: 0, rz: 0.4, cor }); // capô aberto
+    if (queimado) for (let i = 0; i < 8; i++) p.push({ w: rand(0.3, 0.8), h: 0.02, d: rand(0.3, 0.8), x: rand(-1.8, 1.8), y: 0.89, z: rand(-0.8, 0.8), cor: 0x5a3010 });
+    const m = malhaVC(p);
+    m.position.set(cx, 0, cz);
+    m.rotation.y = (giro ? Math.PI / 2 : 0) + rand(-0.06, 0.06);
+    cena.add(m);
+    addObst(cx, cz, giro ? 1.9 : 4.2, giro ? 4.2 : 1.9, 1.65, 'carro', m);
     if (queimado) {
       const luz = new THREE.PointLight(0xff6a20, 25, 16, 1.3);
       luz.position.set(cx, 2.2, cz);
       cena.add(luz);
-      fogos.push({ luz, x: cx, z: cz });
+      fogos.push({ luz, x: cx, z: cz, larg: 1.2 });
     }
   }
-  const queimados = zona.id === 'centro' ? 3 : zona.id === 'lab' ? 1 : 0;
+  const queimados = zona.id === 'centro' ? 3 : zona.id === 'lab' || zona.id === 'base' ? 1 : 0;
   let nCarros = 0, tent = 0;
   while (nCarros < 14 && tent++ < 400) {
     const giro = Math.random() < 0.5;
     const cx = rand(-32, 32), cz = rand(-32, 32);
     if (livre(cx, cz, giro ? 1.9 : 4.2, giro ? 4.2 : 1.9, 2.2)) { carro(cx, cz, giro, nCarros < queimados); nCarros++; }
   }
-  // caixas
+  // viatura de polícia com sirene
+  if (zona.id !== 'ninho') {
+    for (let t = 0; t < 100; t++) {
+      const giro = Math.random() < 0.5, cx = rand(-28, 28), cz = rand(-28, 28);
+      if (!livre(cx, cz, giro ? 1.9 : 4.3, giro ? 4.3 : 1.9, 2.2)) continue;
+      const v = VIS.viatura();
+      v.position.set(cx, 0, cz); v.rotation.y = giro ? Math.PI / 2 : 0;
+      cena.add(sombra(v));
+      addObst(cx, cz, giro ? 1.9 : 4.3, giro ? 4.3 : 1.9, 1.6, 'carro', v);
+      piscas.push(v.userData);
+      break;
+    }
+  }
+  // caixas de suprimento
   tent = 0; let nCx = 0;
   while (nCx < 12 && tent++ < 400) {
     const cx = rand(-32, 32), cz = rand(-32, 32), s = rand(1.0, 1.4);
@@ -201,62 +295,137 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       m.scale.setScalar(s * (i ? 0.85 : 1));
       m.position.set(cx + rand(-0.05, 0.05), s / 2 + i * s * 0.92, cz);
       m.rotation.y = rand(-0.2, 0.2);
-      cena.add(m);
+      cena.add(sombra(m));
     }
     addObst(cx, cz, s, s, s * pilha, 'caixa');
     nCx++;
   }
-  // barreiras de concreto
-  const matConcreto = new THREE.MeshLambertMaterial({ color: 0x8a8a82 });
+  // barreiras de concreto (formato New Jersey, com faixas)
   tent = 0; let nB = 0;
   while (nB < 8 && tent++ < 300) {
     const giro = Math.random() < 0.5;
     const w = giro ? 0.6 : 3, d = giro ? 3 : 0.6;
     const cx = rand(-30, 30), cz = rand(-30, 30);
     if (!livre(cx, cz, w, d, 2.5)) continue;
-    const m = new THREE.Mesh(geoCaixa, matConcreto);
-    m.scale.set(w, 1.0, d); m.position.set(cx, 0.5, cz);
+    const p = [{ w: 3, h: 0.35, d: 0.7, x: 0, y: 0.175, cor: 0x8a8a82 }, { w: 3, h: 0.65, d: 0.32, x: 0, y: 0.67, cor: 0x92928a }];
+    for (let i = 0; i < 4; i++) p.push({ w: 0.25, h: 0.2, d: 0.33, x: -1.1 + i * 0.75, y: 0.8, rz: 0.6, cor: i % 2 ? 0xd0a020 : 0x1a1a1a });
+    const m = malhaVC(p);
+    m.position.set(cx, 0, cz); m.rotation.y = giro ? Math.PI / 2 : 0;
     cena.add(m);
     addObst(cx, cz, w, d, 1.0, 'barreira');
     nB++;
   }
+  // sacos de areia (mais na base militar)
+  const nSacos = zona.id === 'base' ? 8 : zona.id === 'ninho' ? 0 : 2;
+  tent = 0; let nS = 0;
+  while (nS < nSacos && tent++ < 300) {
+    const giro = Math.random() < 0.5, comp = rand(2.4, 3.6);
+    const w = giro ? 0.5 : comp, d = giro ? comp : 0.5;
+    const cx = rand(-30, 30), cz = rand(-30, 30);
+    if (!livre(cx, cz, w, d, 2.5)) continue;
+    const sacos = VIS.sacosDeAreia(comp);
+    sacos.position.set(cx, 0, cz); sacos.rotation.y = giro ? Math.PI / 2 : 0;
+    cena.add(sombra(sacos));
+    addObst(cx, cz, w, d, 0.9, 'barreira');
+    nS++;
+  }
   // barris explosivos
   const barris = [];
-  const matBarril = new THREE.MeshLambertMaterial({ color: 0xb02010 });
-  const matFaixa = new THREE.MeshBasicMaterial({ color: 0xffd020 });
-  const geoBarril = new THREE.CylinderGeometry(0.42, 0.42, 1.15, 12);
-  const geoFaixa = new THREE.CylinderGeometry(0.43, 0.43, 0.12, 12);
   tent = 0;
   while (barris.length < 9 && tent++ < 300) {
     const cx = rand(-30, 30), cz = rand(-30, 30);
     if (!livre(cx, cz, 0.84, 0.84, 2)) continue;
-    const g = new THREE.Group();
-    const b = new THREE.Mesh(geoBarril, matBarril); b.position.y = 0.575; g.add(b);
-    const f = new THREE.Mesh(geoFaixa, matFaixa); f.position.y = 0.8; g.add(f);
+    const p = [
+      { g: 'cil', w: 0.84, h: 1.15, d: 0.84, y: 0.575, cor: 0xb02010 },
+      { g: 'cil', w: 0.87, h: 0.06, d: 0.87, y: 0.3, cor: 0x7a1408 }, { g: 'cil', w: 0.87, h: 0.06, d: 0.87, y: 0.85, cor: 0x7a1408 },
+      { g: 'cil', w: 0.86, h: 0.12, d: 0.86, y: 0.6, cor: 0xffd020 },
+      { g: 'cil', w: 0.7, h: 0.02, d: 0.7, y: 1.16, cor: 0x5a1008 }, { g: 'cil', w: 0.12, h: 0.06, d: 0.12, x: 0.2, y: 1.18, cor: 0x3a3a3a },
+    ];
+    const g = malhaVC(p);
     g.position.set(cx, 0, cz);
     cena.add(g);
     const o = addObst(cx, cz, 0.84, 0.84, 1.15, 'barril', g);
     o.hp = 40;
     barris.push(o);
   }
-  // postes de luz
-  const matPoste = new THREE.MeshLambertMaterial({ color: 0x30343a });
-  const matLampada = new THREE.MeshBasicMaterial({ color: 0xffe0a0 });
-  for (const [px, pz] of [[-8, 8], [8, -8], [-26, -4], [26, 6]]) {
-    const poste = new THREE.Mesh(geoCaixa, matPoste); poste.scale.set(0.18, 6, 0.18); poste.position.set(px, 3, pz); cena.add(poste);
-    const lamp = new THREE.Mesh(geoCaixa, matLampada); lamp.scale.set(0.6, 0.15, 0.3); lamp.position.set(px, 6, pz); cena.add(lamp);
-    const luz = new THREE.PointLight(0xffd9a0, 30, 20, 1.4); luz.position.set(px, 5.6, pz); cena.add(luz);
+  // barris com fogo e caçambas (obstáculos pequenos)
+  const nFogo = zona.id === 'centro' || zona.id === 'base' ? 3 : zona.id === 'suburbio' ? 1 : 0;
+  tent = 0; let nF = 0;
+  while (nF < nFogo && tent++ < 200) {
+    const cx = rand(-28, 28), cz = rand(-28, 28);
+    if (!livre(cx, cz, 0.7, 0.7, 2)) continue;
+    const b = VIS.barrilFogo(); b.position.set(cx, 0, cz); cena.add(b);
+    addObst(cx, cz, 0.66, 0.66, 0.9, 'caixa');
+    fogos.push({ luz: b.userData.luz, x: cx, z: cz, larg: 0.25, y: 0.95 });
+    nF++;
+  }
+  tent = 0; let nCac = 0;
+  while (nCac < 3 && tent++ < 200) {
+    const cx = rand(-30, 30), cz = rand(-30, 30), giro = Math.random() < 0.5;
+    if (!livre(cx, cz, giro ? 1.2 : 2, giro ? 2 : 1.2, 2.2)) continue;
+    const c = VIS.cacamba(); c.position.set(cx, 0, cz); c.rotation.y = giro ? Math.PI / 2 : 0; cena.add(sombra(c));
+    addObst(cx, cz, giro ? 1.2 : 2, giro ? 2 : 1.2, 1.2, 'caixa');
+    nCac++;
+  }
+  // postes de luz (alguns quebrados)
+  for (const [px, pz] of [[-8, 8], [8, -8], [-26, -4], [26, 6], [-10, -24], [12, 24]]) {
+    const quebrado = Math.random() < (zona.id === 'ninho' ? 0.7 : 0.3);
+    const poste = VIS.poste(quebrado);
+    poste.position.set(px, 0, pz);
+    poste.rotation.y = rand(0, 6.28);
+    cena.add(sombra(poste));
+    if (!quebrado) {
+      const luz = new THREE.PointLight(0xffd9a0, 30, 20, 1.4);
+      poste.userData.lamp.getWorldPosition(luz.position); luz.position.y -= 0.3;
+      cena.add(luz);
+    }
     addObst(px, pz, 0.3, 0.3, 6, 'poste');
   }
+  // decoração sem colisão: cones, lixo, corpos, tumores, tambores químicos
+  function decorar(fabrica, n, raio = 31) {
+    for (let i = 0, t = 0; i < n && t < n * 20; t++) {
+      const x = rand(-raio, raio), z = rand(-raio, raio);
+      if (!livre(x, z, 0.8, 0.8, 0.4)) continue;
+      const o = fabrica(); o.position.set(x, 0, z); o.rotation.y = rand(0, 6.28); cena.add(o); i++;
+    }
+  }
+  const pouco = qual === 'baixo' ? 0.5 : 1;
+  decorar(VIS.cone, Math.round(10 * pouco));
+  decorar(VIS.sacoLixo, Math.round(14 * pouco));
+  decorar(VIS.cadaver, Math.round((zona.dif > 2 ? 10 : 6) * pouco));
+  if (zona.id === 'ninho') decorar(() => VIS.tumor('roxo'), Math.round(16 * pouco));
+  if (zona.id === 'lab') { decorar(VIS.tamborQuimico, Math.round(6 * pouco)); decorar(() => VIS.tumor('verde'), Math.round(5 * pouco)); }
+  if (zona.id === 'base') {
+    for (const lado of [-1, 1]) { const c = VIS.cercaArame(18); c.position.set(lado * 24, 0, 6); c.rotation.y = Math.PI / 2; cena.add(c); }
+  }
+
+  // chão desenhado com o mapa inteiro (ruas, calçadas, faixas, poças)
+  const tamChao = qual === 'baixo' ? 1024 : 2048;
+  const tc = VIS.texChaoMapa(obst, L, zona.id, tamChao);
+  reg(tc.map); reg(tc.roughnessMap);
+  const chao = new THREE.Mesh(new THREE.PlaneGeometry(L * 2, L * 2),
+    qual === 'baixo' ? new THREE.MeshLambertMaterial({ map: tc.map }) : new THREE.MeshStandardMaterial({ map: tc.map, roughnessMap: tc.roughnessMap, roughness: 1, metalness: 0.05 }));
+  chao.rotation.x = -Math.PI / 2;
+  chao.receiveShadow = alto;
+  cena.add(chao);
+
   // heliponto
   const heli = new THREE.Group();
   const disco = new THREE.Mesh(new THREE.CircleGeometry(4.2, 32), new THREE.MeshLambertMaterial({ color: 0x24282c }));
-  disco.rotation.x = -Math.PI / 2; disco.position.y = 0.02; heli.add(disco);
+  disco.rotation.x = -Math.PI / 2; disco.position.y = 0.02; disco.receiveShadow = alto; heli.add(disco);
   const anel = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.0, 40), new THREE.MeshBasicMaterial({ color: 0xffd020 }));
   anel.rotation.x = -Math.PI / 2; anel.position.y = 0.03; heli.add(anel);
   const matH = new THREE.MeshBasicMaterial({ color: 0xffffff });
   for (const [x, z, w, d] of [[-0.9, 0, 0.35, 2.6], [0.9, 0, 0.35, 2.6], [0, 0, 1.5, 0.35]]) {
     const b = new THREE.Mesh(new THREE.PlaneGeometry(w, d), matH); b.rotation.x = -Math.PI / 2; b.position.set(x, 0.04, z); heli.add(b);
+  }
+  // luzes de pouso piscando em volta
+  const luzesPouso = [];
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0x40ff80, toneMapped: false }));
+    l.position.set(Math.cos(a) * 4.3, 0.1, Math.sin(a) * 4.3);
+    heli.add(l); luzesPouso.push(l);
   }
   const feixe = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 40, 32, 1, true),
     new THREE.MeshBasicMaterial({ color: 0x40ff80, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -264,17 +433,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   heli.position.set(CEL_HELI.x, 0, CEL_HELI.z);
   cena.add(heli);
 
-  // estrelas
-  {
-    const pos = [];
-    for (let i = 0; i < 500; i++) {
-      const a = Math.random() * Math.PI * 2, e = rand(0.12, 1.4), r = 150;
-      pos.push(Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    cena.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, fog: false, sizeAttenuation: true })));
-  }
+  // pós-processamento (brilho, cor, vinheta, grão)
+  const TINTS = { suburbio: 0xc8d8ff, centro: 0xffc8a0, lab: 0xc0ffd0, base: 0xe8e8c8, ninho: 0xe8c0ff };
+  const pos = VIS.criarPos(R, cena, camera, vmCena, vmCam, qual, mod.has('lua') ? 0xffb0a0 : TINTS[zona.id] || 0xffffff);
 
   // ---------- grid de navegação (flow field) ----------
   const bloq = new Uint8Array(N * N);
@@ -413,7 +574,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   const armas = loadout.armas.filter(Boolean).map(a => {
     const st = stats(a);
     st.recarga *= 1 - 0.08 * nv('recarga');
-    const mesh = criarArma(a);
+    const mesh = criarArma(a, { maos: true });
     mesh.visible = false;
     vmCam.add(mesh);
     return { def: a, st, mesh, pente: st.pente, reserva: st.pente * 4, reservaMax: st.pente * 7 };
@@ -457,7 +618,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     const elite = !def.boss && (eliteForcado || Math.random() < chanceElite);
     const g = criarZumbi(tipo, { elite });
     g.position.set(x, 0, z);
-    cena.add(g);
+    cena.add(sombra(g, false));
     const escalaOnda = 1 + 0.1 * (Math.min(onda, 30) - 1) + (sobrevivencia ? 0.04 * Math.max(0, onda - 10) : 0);
     const forca = 0.7 + 0.3 * zona.dif;
     let hp = def.hp * escalaOnda * forca * (def.boss ? 0.6 + 0.4 * zona.dif : 1) * (mod.has('lua') ? 1.6 : 1) * (elite ? 3 : 1);
@@ -698,6 +859,14 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   function matar(z, cabeca, origem) {
     if (!z.vivo) return;
     z.vivo = false; z.morte = 0;
+    z.queda = Math.random() < 0.5 ? -1 : 1; z.giroQueda = rand(-0.5, 0.5);
+    marcas.sangue(z.x, z.z, 1.2 * z.escala);
+    if (cabeca && !z.def.boss && origem === 'bala' && z.g.userData.cabeca) {
+      z.g.userData.cabeca.visible = false;
+      const hy = z.cabY * z.escala;
+      sangue(z.x, hy, z.z, 26);
+      for (let i = 0; i < 6; i++) particula(z.x, hy, z.z, rand(-3, 3), rand(1, 5), rand(-3, 3), rand(0.6, 1.2), rand(0.06, 0.1), 0x8a7a6a);
+    }
     abates++;
     placar.porTipo[z.tipo] = (placar.porTipo[z.tipo] || 0) + 1;
     if (origem === 'faca') placar.facao++;
@@ -742,7 +911,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       const d = Math.hypot(zb.x - x, zb.z - z);
       if (d < raio + zb.raio) danoZumbi(zb, dano * (1 - 0.6 * d / (raio + zb.raio)) * (origem === 'zumbi' ? 0.5 : 1), false, zb.x, 1.4 * zb.escala, zb.z, 'explosao');
     }
-    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' ? 0.5 : 1));
+    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' ? 0.5 : 1), false, { x, z });
     for (const b of barris) {
       if (b.hp > 0 && Math.hypot((b.minx + b.maxx) / 2 - x, (b.minz + b.maxz) / 2 - z) < raio) {
         b.hp = 0;
@@ -760,8 +929,22 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     explodir(cx, 0.8, cz, 5.5, 220, 'barril');
   }
 
-  function danoJogador(v, silencioso) {
+  const dirEls = [];
+  $('dirDano').innerHTML = '';
+  for (let i = 0; i < 4; i++) { const e = document.createElement('i'); $('dirDano').appendChild(e); dirEls.push(e); }
+  let iDir = 0;
+  function mostrarDirecao(x, z) {
+    const dx = x - jog.x, dz = z - jog.z;
+    const f = -dx * Math.sin(jog.yaw) - dz * Math.cos(jog.yaw);
+    const r = dx * Math.cos(jog.yaw) - dz * Math.sin(jog.yaw);
+    const e = dirEls[iDir]; iDir = (iDir + 1) % dirEls.length;
+    e.style.transform = `rotate(${Math.atan2(r, f)}rad)`;
+    e.classList.add('on');
+    requestAnimationFrame(() => requestAnimationFrame(() => e.classList.remove('on')));
+  }
+  function danoJogador(v, silencioso, fonte) {
     if (jog.morto || acabou) return;
+    if (fonte && !silencioso && jog.invul <= 0) mostrarDirecao(fonte.x, fonte.z);
     if (jog.invul > 0) { if (!silencioso) numeroDano(jog.x + Math.sin(jog.yaw) * -2, jog.y + 1.8, jog.z - Math.cos(jog.yaw) * 2, 0, false, '#9cf', 'ESQUIVOU'); return; }
     v *= 1 - 0.05 * nv('resistencia');
     if (jog.armadura > 0) {
@@ -805,6 +988,10 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     chute = 1;
     flashT = 0.05;
     luzTiro.intensity = 14;
+    vmLuzTiro.intensity = 4;
+    ultimoTiro = tempo;
+    marcas.fumaca(pontaW.x, pontaW.y, pontaW.z, a.def.tipo === 'escopeta' || a.def.tipo === 'sniper' ? 0.7 : 0.35);
+    if (a.def.tipo === 'escopeta') setTimeout(() => !acabou && ejetarCapsula(true), 280); else ejetarCapsula(false);
     som.tiro(a.def.tipo, a.def.tier >= 5);
     atualizarHudArma();
     if (a.pente === 0 && a.reserva > 0) setTimeout(() => { if (!acabou) recarregar(); }, 200);
@@ -854,7 +1041,18 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     if (hits.length < maxHits && !bloqueou) {
       tFim = tObst;
       if (tFim < st.alcance * 1.6) {
-        faiscas(o.x + d.x * tFim, o.y + d.y * tFim, o.z + d.z * tFim);
+        const ix = o.x + d.x * tFim, iy = o.y + d.y * tFim, iz = o.z + d.z * tFim;
+        faiscas(ix, iy, iz);
+        if (principal || Math.random() < 0.3) {
+          if (!obstAtingido) marcas.furo(ix, 0.01, iz, 0, 1, 0);
+          else {
+            const b = obstAtingido;
+            const dd = [[Math.abs(ix - b.minx), -1, 0, 0], [Math.abs(ix - b.maxx), 1, 0, 0], [Math.abs(iz - b.minz), 0, 0, -1], [Math.abs(iz - b.maxz), 0, 0, 1], [Math.abs(iy - b.h), 0, 1, 0]];
+            dd.sort((p, q) => p[0] - q[0]);
+            marcas.furo(ix, iy, iz, dd[0][1], dd[0][2], dd[0][3]);
+          }
+          particula(ix, iy, iz, rand(-1, 1), rand(0.5, 1.5), rand(-1, 1), 0.5, 0.12, 0x5a5650, 2);
+        }
         if (obstAtingido && obstAtingido.tipo === 'barril' && !obstAtingido.estourado) {
           obstAtingido.hp -= st.dano;
           if (obstAtingido.hp <= 0) estourarBarril(obstAtingido);
@@ -1034,7 +1232,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       const dj = Math.hypot(jog.x - c.x, jog.z - c.z);
       if (!c.atingiu && Math.abs(dj - c.r) < 0.8 && jog.y < 0.45) {
         c.atingiu = true;
-        danoJogador(c.dano);
+        danoJogador(c.dano, false, c);
         empurrarJogador(jog.x - c.x, jog.z - c.z, 14);
       }
       if (c.r > 18) { cena.remove(c.m); c.m.material.dispose(); choques.splice(i, 1); }
@@ -1116,7 +1314,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
         const andou = Math.hypot(z.x - ax, z.z - az);
         if (!z.acertou && Math.hypot(jog.x - z.x, jog.z - z.z) < z.raio + 1.0) {
           z.acertou = true;
-          danoJogador(z.dano * 1.3);
+          danoJogador(z.dano * 1.3, false, z);
           empurrarJogador(z.dir.x, z.dir.z, 16);
           z.ia = 'normal'; z.cdEsp = rand(4, 6) * (vida < 0.4 ? 0.6 : 1);
           return { mx: 0, mz: 0 };
@@ -1203,6 +1401,27 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     return null;
   }
 
+  // cápsulas ejetadas (na cena da arma, em coordenadas da câmera)
+  let ultimoTiro = -9;
+  const capsulas = [];
+  const matLatao = new THREE.MeshStandardMaterial({ color: 0xd0a040, metalness: 1, roughness: 0.3 });
+  const matCartucho = new THREE.MeshStandardMaterial({ color: 0xb01810, roughness: 0.6 });
+  for (let i = 0; i < 10; i++) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 8), matLatao);
+    m.visible = false; vmCam.add(m);
+    capsulas.push({ m, vida: 0, v: new THREE.Vector3(), w: 0 });
+  }
+  let iCap = 0;
+  function ejetarCapsula(cartucho) {
+    const c = capsulas[iCap]; iCap = (iCap + 1) % capsulas.length;
+    const am = armas[atual].mesh;
+    c.m.material = cartucho ? matCartucho : matLatao;
+    c.m.scale.set(cartucho ? 2.4 : 1, cartucho ? 2 : 1, cartucho ? 2.4 : 1);
+    c.m.position.set(am.position.x + 0.03, am.position.y + 0.03, am.position.z + 0.12);
+    c.v.set(rand(1.0, 1.6), rand(0.9, 1.4), rand(0.1, 0.4));
+    c.w = rand(15, 25); c.vida = 0.55; c.m.visible = true;
+  }
+
   function recarregar() {
     const a = armas[atual];
     if (recarregando > 0 || trocando > 0 || a.pente >= a.st.pente || a.reserva <= 0) return;
@@ -1263,6 +1482,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     vmCena.traverse(o => { if (o.material) o.material.dispose(); });
     geoCaixa.dispose();
     descartaveis.forEach(d => d.dispose && d.dispose());
+    pos.dispose();
     R.clear();
   }
 
@@ -1430,7 +1650,10 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
 
   function redimensionar() {
     const w = window.innerWidth, h = window.innerHeight;
+    const pr = Math.min(window.devicePixelRatio || 1, qual === 'alto' ? 1.5 : qual === 'medio' ? 1.25 : 1);
+    R.setPixelRatio(pr);
     R.setSize(w, h, false);
+    pos.resize(w, h, pr);
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
     camera.aspect = vmCam.aspect = w / h;
     camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
@@ -1563,9 +1786,13 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       const ud = z.g.userData;
       if (!z.vivo) {
         z.morte += dt;
-        ud.corpo.rotation.x = Math.min(Math.PI / 2, z.morte * 5) * -1;
-        ud.corpo.position.y = Math.min(z.morte * 3, 1) * 0.2 * z.escala - Math.max(0, z.morte - 1.5) * 0.6;
-        if (z.morte > 2.6) { cena.remove(z.g); z.g.userData.mats.forEach(m => m.dispose()); zumbis.splice(i, 1); }
+        const k = Math.min(1, z.morte * 3.2);
+        const queda = k * k * (Math.PI / 2) * (z.queda || -1);
+        ud.corpo.rotation.x = queda;
+        ud.corpo.rotation.z = (z.giroQueda || 0) * k;
+        ud.corpo.position.y = Math.sin(k * Math.PI) * 0.15 + 0.12 * k - Math.max(0, z.morte - 3.5) * 0.5;
+        if (ud.bracoE) { ud.bracoE.rotation.x = 2.6 * k; ud.bracoD.rotation.x = 2.2 * k; }
+        if (z.morte > 4.6) { cena.remove(z.g); z.g.userData.mats.forEach(m => m.dispose()); zumbis.splice(i, 1); }
         continue;
       }
       vivos++;
@@ -1653,7 +1880,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
         z.ataque -= dt;
         if (z.ataque <= 0) {
           z.cdAtaque = z.tipo === 'corredor' ? 0.7 : 1.1;
-          if (dist < alcance + 0.4) danoJogador(z.dano * (z.buff > 0 ? 1.3 : 1));
+          if (dist < alcance + 0.4) danoJogador(z.dano * (z.buff > 0 ? 1.3 : 1), false, z);
         }
       }
 
@@ -1666,6 +1893,11 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       ud.bracoE.rotation.x = 1.35 + Math.sin(z.fase * 0.5) * 0.12 + golpe;
       ud.bracoD.rotation.x = 1.45 - Math.sin(z.fase * 0.5) * 0.12 + golpe;
       ud.corpo.rotation.x = -0.12 - (z.tipo === 'corredor' ? 0.25 : 0) - golpe * 0.2;
+      if (ud.canE) { ud.canE.rotation.x = -Math.max(0, passo) * 0.9 - 0.05; ud.canD.rotation.x = -Math.max(0, -passo) * 0.9 - 0.05; }
+      if (ud.antE) { ud.antE.rotation.x = 0.25 + Math.sin(z.fase * 0.7) * 0.15 - golpe * 0.2; ud.antD.rotation.x = 0.3 - Math.sin(z.fase * 0.6) * 0.15 - golpe * 0.2; }
+      if (ud.mandibula) ud.mandibula.rotation.x = 0.12 + Math.abs(Math.sin(tempo * 7 + z.fase)) * 0.18 + golpe * 0.4 + (z.tipo === 'gritador' && z.iaT > 0 ? 0.7 : 0);
+      if (ud.cabeca) { ud.cabeca.rotation.y = Math.sin(tempo * 1.3 + z.fase) * 0.25 + (Math.sin(tempo * 13 + z.fase * 3) > 0.97 ? 0.3 : 0); ud.cabeca.rotation.x = Math.sin(tempo * 0.9 + z.fase) * 0.12; }
+      if (ud.asas) ud.asas.forEach((a, j) => { a.rotation.y = (j ? 1 : -1) * (0.4 + Math.sin(tempo * 6) * 0.25); });
       ud.corpo.position.y = Math.abs(passo) * 0.05;
       if (z.tipo === 'rastejante') {
         ud.corpo.rotation.x = -1.25; ud.corpo.position.z = 0.75; ud.corpo.position.y = 0;
@@ -1723,10 +1955,10 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
         const dj = Math.hypot(p.x - jog.x, p.z - jog.z);
         const raioP = p.tipo === 'pedra' ? 1.1 : 0.7;
         let caiu = false;
-        if (dj < raioP && p.y > jog.y - 0.2 && p.y < jog.y + 2) { danoJogador(p.dano); sangue(p.x, p.y, p.z, 6, cor); remover = true; }
+        if (dj < raioP && p.y > jog.y - 0.2 && p.y < jog.y + 2) { danoJogador(p.dano, false, { x: p.x - p.vx, z: p.z - p.vz }); sangue(p.x, p.y, p.z, 6, cor); remover = true; }
         else if (p.y < 0 || p.t <= 0) { sangue(p.x, 0.1, p.z, 8, cor); remover = true; caiu = true; }
         else for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) { remover = true; caiu = true; break; }
-        if (caiu && p.tipo === 'pedra') { bolaFogo(p.x, 0.5, p.z, 2.5, 0x8a7a60); tremor = Math.max(tremor, 0.2); if (dj < 3) danoJogador(p.dano * 0.5); }
+        if (caiu && p.tipo === 'pedra') { bolaFogo(p.x, 0.5, p.z, 2.5, 0x8a7a60); tremor = Math.max(tremor, 0.2); if (dj < 3) danoJogador(p.dano * 0.5, false, p); }
         if (caiu && p.tipo === 'acido') criarNuvem(p.x, p.z, 1.8, 10, 3.5);
       }
       p.m.position.set(p.x, p.y, p.z);
@@ -1850,7 +2082,36 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     }
     for (const fg of fogos) {
       fg.luz.intensity = 20 + Math.random() * 12;
-      if (Math.random() < dt * 30) particula(fg.x + rand(-1.2, 1.2), 1.6, fg.z + rand(-0.6, 0.6), rand(-0.3, 0.3), rand(1.5, 3.5), rand(-0.3, 0.3), rand(0.4, 0.9), rand(0.1, 0.22), Math.random() < 0.6 ? 0xff6a10 : 0xffb020, -1);
+      const lg = fg.larg || 1.2;
+      if (Math.random() < dt * 30) particula(fg.x + rand(-lg, lg), fg.y || 1.6, fg.z + rand(-lg * 0.5, lg * 0.5), rand(-0.3, 0.3), rand(1.5, 3.5), rand(-0.3, 0.3), rand(0.4, 0.9), rand(0.1, 0.22), Math.random() < 0.6 ? 0xff6a10 : 0xffb020, -1);
+      if (Math.random() < dt * 4) marcas.fumaca(fg.x + rand(-0.3, 0.3), (fg.y || 1.6) + 1.2, fg.z, 1.2);
+    }
+    ceu.update(dt, camera.position);
+    clima.update(dt, camera.position);
+    nevoa.update(dt, camera.position);
+    marcas.update(dt);
+    for (const n of neons) {
+      if (!n.pisca) continue;
+      n.t -= dt;
+      if (n.t <= 0) { n.t = Math.random() < 0.8 ? rand(0.03, 0.12) : rand(1, 4); n.m.visible = !n.m.visible || Math.random() < 0.3; }
+    }
+    for (const v of piscas) {
+      const fase = Math.floor(tempo * 4) % 2;
+      v.vermelho.visible = fase === 0; v.azul.visible = fase === 1;
+      v.luz.color.setHex(fase ? 0x2040ff : 0xff2020);
+    }
+    luzesPouso.forEach((l, i) => { l.visible = estado === 'extracao' ? Math.floor(tempo * 6 + i) % 2 === 0 : i % 2 === 0; });
+    if (zona.id === 'base' || mod.has('lua')) {
+      proxRelampago -= dt;
+      if (proxRelampago <= 0) { relampago = 1; proxRelampago = rand(8, 18); setTimeout(() => !acabou && som.pisao(), rand(300, 1200)); }
+    }
+    relampago = Math.max(0, relampago - dt * 3);
+    const flashR = relampago > 0.6 || (relampago > 0.2 && relampago < 0.35) ? relampago : 0;
+    ceu.flash(flashR);
+    hemi.intensity = (mod.has('escuridao') ? 0.3 : 0.75) + flashR * 2.5;
+    if (alto) {
+      lua.position.set(jog.x + luaDir.x * 50, luaDir.y * 50, jog.z + luaDir.z * 50);
+      lua.target.position.set(jog.x, 0, jog.z);
     }
     if (anuncioT > 0) { anuncioT -= dt; if (anuncioT <= 0) hud.anuncio.style.opacity = 0; }
     flashDano = Math.max(0, flashDano - dt * 1.5);
@@ -1872,8 +2133,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     // arma na mão
     chute = Math.max(0, chute - dt * 9);
     const comp = a.mesh.userData.comprimento;
-    const base = { x: 0.2, y: -0.2, z: -0.5 - comp * 0.3 };
-    const ads = { x: 0, y: a.def.tipo === 'sniper' ? -0.11 : -0.125, z: -0.55 - comp * 0.2 };
+    const pist = a.def.tipo === 'pistola';
+    const base = pist ? { x: 0.13, y: -0.13, z: -0.32 } : { x: 0.15, y: -0.155, z: -0.3 - comp * 0.08 };
+    const ads = { x: 0, y: -(a.mesh.userData.miraY || 0.08), z: pist ? -0.38 : -0.3 };
     const sw = Math.sin(jog.passo) * 0.012 * bob * (1 - mira), sh = Math.abs(Math.cos(jog.passo)) * 0.01 * bob * (1 - mira);
     let px = base.x + (ads.x - base.x) * mira + sw;
     let py = base.y + (ads.y - base.y) * mira - sh - jog.pousou * 0.04 + clamp(jog.vy, -8, 8) * -0.004;
@@ -1900,7 +2162,26 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     const sniperMira = a.def.tipo === 'sniper' && mira > 0.85;
     a.mesh.visible = !sniperMira && !jog.morto;
     hud.luneta.style.display = sniperMira ? 'block' : 'none';
-    a.mesh.traverse(o => { if (o.userData.pulsa) o.scale.setScalar(0.03 * (1 + Math.sin(tempo * 6) * 0.35)); });
+    const uda = a.mesh.userData;
+    uda.animar(tempo);
+    if (a.def.tipo === 'escopeta') {
+      const kp = clamp((tempo - ultimoTiro - 0.12) / 0.38, 0, 1);
+      uda.ferrolho.position.z = Math.sin(kp * Math.PI) * uda.ferroCurso;
+    } else uda.ferrolho.position.z = chute * uda.ferroCurso;
+    if (recarregando > 0) {
+      const kr = 1 - recarregando / a.st.recarga;
+      uda.carregador.position.y = -Math.sin(Math.min(1, kr * 1.25) * Math.PI) * 0.2;
+      uda.carregador.visible = !(kr > 0.32 && kr < 0.55);
+    } else { uda.carregador.position.y = 0; uda.carregador.visible = true; }
+    for (const c of capsulas) {
+      if (c.vida <= 0) continue;
+      c.vida -= dt;
+      c.v.y -= 7 * dt;
+      c.m.position.addScaledVector(c.v, dt);
+      c.m.rotation.x += c.w * dt; c.m.rotation.z += c.w * 0.6 * dt;
+      if (c.vida <= 0) c.m.visible = false;
+    }
+    vmLuzTiro.intensity = Math.max(0, vmLuzTiro.intensity - dt * 60);
 
     // clarão do tiro
     flashT -= dt;
@@ -1913,10 +2194,12 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     } else muzzleSprite.visible = false;
     luzTiro.intensity = Math.max(0, luzTiro.intensity - dt * 400);
 
-    R.clear();
-    R.render(cena, camera);
-    R.clearDepth();
-    R.render(vmCena, vmCam);
+    if (pos.grade) {
+      pos.grade.uniforms.uTempo.value = tempo;
+      pos.grade.uniforms.uBaixa.value = jog.morto ? 1 : clamp(1 - jog.hp / (jog.hpMax * 0.35), 0, 1);
+      pos.grade.uniforms.uDano.value = Math.min(1, flashDano);
+    }
+    pos.render();
 
     // HUD por quadro
     const spread = (a.st.disp * (1 - mira * 0.7) * (Math.hypot(mov.x, mov.z) > 0.1 ? 1.5 : 1) * (1 + Math.min(abrirFogo, 1) * 0.8)) * 900 + 6;
@@ -1929,7 +2212,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       btnFaca.style.opacity = jog.cdFaca > 0 ? 0.5 : 1;
     }
     hud.hit.classList.toggle('cabeca', hitCabeca);
-    hud.dano.style.opacity = Math.max(flashDano, jog.hp < 30 ? 0.35 + Math.sin(tempo * 5) * 0.15 : 0);
+    hud.dano.style.opacity = pos.grade ? flashDano * 0.5 : Math.max(flashDano, jog.hp < 30 ? 0.35 + Math.sin(tempo * 5) * 0.15 : 0);
 
     const w = window.innerWidth, h = window.innerHeight;
     for (const n of numsPool) {
