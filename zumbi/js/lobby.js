@@ -1,10 +1,12 @@
 // Base / lobby: personalizar equipamento, arsenal, loja e escolher a raid.
 import * as THREE from 'three';
 import {
-  TIERS, PERKS, TIPOS, CAMOS, COLETES, CONSUMIVEIS, CAIXAS, ZONAS,
+  TIERS, PERKS, TIPOS, CAMOS, COLETES, CONSUMIVEIS, CAIXAS, ZONAS, ZUMBIS, MODIFICADORES, PERICIAS, BOSS_PESOS,
   stats, barras, rolarTier, novaArma, carregar, salvar, resetar, armaPorUid, fmt,
+  xpProximo, gerarMissao, zonaLiberada,
 } from './dados.js';
-import { criarArma } from './modelos.js';
+import { criarArma, criarZumbi } from './modelos.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { iniciarAudio, som, setSom } from './audio.js';
 import { iniciarRaid } from './raid.js';
 
@@ -22,12 +24,17 @@ let armaFoco = null;        // uid em destaque na vitrine
 let filtroTier = -1;
 let zonaSel = 0;
 let raidAtual = null;
+let modo = 'raid';
+const modsSel = new Set();
+while (save.missoes.length < 3) save.missoes.push(gerarMissao(save));
 
 // ---------------- miniaturas e vitrine 3D ----------------
 const thumbR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 thumbR.setSize(240, 120);
 thumbR.outputColorSpace = THREE.SRGBColorSpace;
+thumbR.toneMapping = THREE.ACESFilmicToneMapping;
 const thumbCena = new THREE.Scene();
+{ const pm = new THREE.PMREMGenerator(thumbR); thumbCena.environment = pm.fromScene(new RoomEnvironment(thumbR), 0.04).texture; pm.dispose(); }
 thumbCena.add(new THREE.AmbientLight(0xffffff, 0.9));
 const tl = new THREE.DirectionalLight(0xffffff, 2.5); tl.position.set(1, 2, 2); thumbCena.add(tl);
 const thumbCam = new THREE.PerspectiveCamera(30, 2, 0.1, 20);
@@ -65,7 +72,10 @@ const prevCanvas = $('preview');
 const prevR = new THREE.WebGLRenderer({ canvas: prevCanvas, antialias: true, alpha: true });
 prevR.setPixelRatio(Math.min(devicePixelRatio, 2));
 prevR.outputColorSpace = THREE.SRGBColorSpace;
+prevR.toneMapping = THREE.ACESFilmicToneMapping;
+prevR.toneMappingExposure = 1.1;
 const prevCena = new THREE.Scene();
+{ const pm = new THREE.PMREMGenerator(prevR); prevCena.environment = pm.fromScene(new RoomEnvironment(prevR), 0.04).texture; pm.dispose(); }
 prevCena.add(new THREE.AmbientLight(0xffffff, 0.6));
 const pl = new THREE.DirectionalLight(0xffffff, 2.5); pl.position.set(2, 3, 2); prevCena.add(pl);
 const pl2 = new THREE.DirectionalLight(0xff9070, 1.0); pl2.position.set(-2, 0, -2); prevCena.add(pl2);
@@ -82,7 +92,7 @@ function mostrarPreview(arma) {
   prevPiv.rotation.set(0, 0, 0);
   prevPiv.updateMatrixWorld(true);
   prevCam.aspect = 1.6;
-  const d = enquadrar(prevModelo, prevCam, 1.25);
+  const d = enquadrar(prevModelo, prevCam, 0.9);
   prevCam.userData.dist = d;
   prevLuzTier.color.set(TIERS[arma.tier].cor);
   prevLuzTier.intensity = 1 + arma.tier * 0.8;
@@ -102,7 +112,7 @@ function loopPreview(t) {
   prevCam.position.set(0, d * 0.18, d); prevCam.lookAt(0, 0, 0);
   if (prevAuto) prevGiro += 0.008;
   prevPiv.rotation.y = prevGiro + Math.PI / 2;
-  prevModelo.traverse(o => { if (o.userData.pulsa) o.scale.setScalar(0.03 * (1 + Math.sin(t / 160) * 0.35)); });
+  prevModelo.userData.animar?.(t / 1000);
   prevR.render(prevCena, prevCam);
 }
 requestAnimationFrame(loopPreview);
@@ -119,7 +129,7 @@ function ordenarInv() { save.inv.sort((a, b) => b.tier - a.tier || a.tipo.locale
 
 function cartaArma(a, extras = '') {
   const t = TIERS[a.tier];
-  return `<div class="carta ${a.tier === 5 ? 'mitico' : ''}" style="--cor:${t.cor}" data-uid="${a.uid}">
+  return `<div class="carta t${a.tier} ${a.tier === 5 ? 'mitico' : ''}" style="--cor:${t.cor}" data-uid="${a.uid}">
     ${equipadaEm(a.uid) ? '<span class="eqTag">EQUIPADA</span>' : ''}
     <img src="${miniatura(a)}" alt="">
     <div class="t">${t.nome} · ${TIPOS[a.tipo].nome}</div>
@@ -140,6 +150,12 @@ function render() {
   if (aba === 'arsenal') renderArsenal();
   if (aba === 'loja') renderLoja();
   if (aba === 'raid') renderRaid();
+  if (aba === 'pericias') renderPericias();
+  if (aba === 'missoes') renderMissoes();
+  if (aba === 'bestiario') renderBestiario();
+  const prontas = save.missoes.filter(m => m.progresso >= m.qtd).length;
+  document.querySelector('[data-aba="missoes"]').textContent = 'Missões' + (prontas ? ` (${prontas}!)` : '');
+  document.querySelector('[data-aba="pericias"]').textContent = 'Perícias' + (save.pontos ? ` (+${save.pontos})` : '');
 }
 
 // ---------------- EQUIPAMENTO ----------------
@@ -162,12 +178,12 @@ function renderEquip() {
     slotArma('secundaria', 'Arma secundária', sec) +
     `<div class="slot ${slotFoco === 'colete' ? 'foco' : ''}" data-slot="colete"><div class="rot">Colete</div>
       <div class="nome">${colete.nome}</div><div class="sub">${colete.armadura ? '+' + colete.armadura + ' de armadura' : 'Sem proteção'}</div></div>` +
-    qtd('granadas') + qtd('kits');
+    qtd('granadas') + qtd('kits') + qtd('torretas');
 
   $('slots').querySelectorAll('[data-slot]').forEach(el => el.addEventListener('click', e => {
     if (e.target.dataset.comprar) return;
     const s = el.dataset.slot;
-    if (s === 'granadas' || s === 'kits') return;
+    if (CONSUMIVEIS[s]) return;
     slotFoco = s; som.clique();
     if (s === 'primaria') armaFoco = save.equip.primaria;
     if (s === 'secundaria') armaFoco = save.equip.secundaria;
@@ -246,9 +262,9 @@ function vitrine(a, slot) {
 
 function comprarConsumivel(id) {
   const c = CONSUMIVEIS[id];
-  if (save[id] >= c.max) return aviso('Limite atingido');
+  if ((save[id] || 0) >= c.max) return aviso('Limite atingido');
   if (save.grana < c.preco) return aviso('Grana insuficiente');
-  save.grana -= c.preco; save[id]++; som.pegar();
+  save.grana -= c.preco; save[id] = (save[id] || 0) + 1; som.pegar();
   render();
 }
 
@@ -286,8 +302,8 @@ function renderLoja() {
   }).join('');
   $('caixas').querySelectorAll('[data-caixa]').forEach(b => b.addEventListener('click', () => abrirCaixa(CAIXAS.find(c => c.id === b.dataset.caixa))));
 
-  $('suprimentos').innerHTML = Object.entries(CONSUMIVEIS).map(([id, c]) => `<div class="loja"><h4>${id === 'granadas' ? '💣' : '✚'} ${c.nome}</h4>
-    <div style="font-size:12px;color:var(--fraco)">${id === 'granadas' ? 'Explode em área. Ótima contra hordas.' : 'Recupera 60 de vida.'} Você tem ${save[id]}/${c.max}.</div>
+  $('suprimentos').innerHTML = Object.entries(CONSUMIVEIS).map(([id, c]) => `<div class="loja"><h4>${c.icone} ${c.nome}</h4>
+    <div style="font-size:12px;color:var(--fraco)">${c.desc} Você tem ${save[id] || 0}/${c.max}.</div>
     <button class="btn" data-sup="${id}" ${save[id] >= c.max ? 'disabled' : ''}>Comprar · <span class="preco">${fmt(c.preco)}</span></button></div>`).join('');
   $('suprimentos').querySelectorAll('[data-sup]').forEach(b => b.addEventListener('click', () => comprarConsumivel(b.dataset.sup)));
 
@@ -359,23 +375,169 @@ $('roletaOk').addEventListener('click', () => { $('roleta').classList.remove('on
 
 // ---------------- RAID ----------------
 function renderRaid() {
+  $('modos').innerHTML = [
+    ['raid', 'Raid', 'Ondas fixas, chefe no final e extração'],
+    ['sobrevivencia', 'Sobrevivência', `Ondas infinitas · recorde: onda ${save.stats.melhorSobrevivencia || 0}`],
+  ].map(([id, nome, d]) => `<button data-modo="${id}" class="${modo === id ? 'on' : ''}">${nome}<small>${d}</small></button>`).join('');
+  $('modos').querySelectorAll('[data-modo]').forEach(b => b.addEventListener('click', () => { modo = b.dataset.modo; som.clique(); renderRaid(); }));
+
+  if (!zonaLiberada(save, ZONAS[zonaSel])) zonaSel = 0;
   $('zonas').innerHTML = ZONAS.map((z, i) => {
     const cor = '#' + z.neblina.toString(16).padStart(6, '0'), luz = '#' + z.luz.toString(16).padStart(6, '0');
     const tot = z.loot.reduce((a, b) => a + b, 0);
-    return `<div class="zona ${zonaSel === i ? 'on' : ''}" data-z="${i}">
+    const lib = zonaLiberada(save, z);
+    const req = z.requer && ZONAS.find(o => o.id === z.requer);
+    return `<div class="zona ${zonaSel === i ? 'on' : ''} ${lib ? '' : 'bloq'}" data-z="${i}">
       <div class="img" style="background:linear-gradient(180deg, ${cor}, #000), radial-gradient(circle at 70% 30%, ${luz}55, transparent 50%);background-blend-mode:screen"></div>
-      <h4>${z.nome}</h4><div class="dif">${'☠'.repeat(Math.round(z.dif * 1.5))} · ${z.ondas} ondas · recompensa ×${z.recompensa}</div>
-      <p>${z.descricao}</p>
+      <h4>${lib ? '' : '🔒 '}${z.nome}</h4><div class="dif">${'☠'.repeat(Math.round(z.dif * 1.5))} · ${z.ondas} ondas · recompensa ×${z.recompensa}</div>
+      <p>${lib ? z.descricao : `Extraia de <b>${req.nome}</b> para liberar.`}</p>
+      <p style="margin-top:4px">Chefe: <b style="color:#ff7090">${z.chefes.map(c => ZUMBIS[c].nome).join(' + ')}</b></p>
       <div class="chances" style="margin-top:8px">${z.loot.map((p, k) => `<i style="width:${p / tot * 100}%;background:${TIERS[k].cor}"></i>`).join('')}</div>
-      <div class="chancesTxt">Loot dos zumbis${i === 2 ? ' · chance de Mítico ' + (z.loot[5] / tot * 100).toFixed(0) + '%' : ''}</div></div>`;
+      <div class="chancesTxt">Loot · chance de Mítico ${(z.loot[5] / tot * 100).toFixed(z.loot[5] / tot < 0.01 ? 2 : 0)}%</div></div>`;
   }).join('');
-  $('zonas').querySelectorAll('[data-z]').forEach(el => el.addEventListener('click', () => { zonaSel = +el.dataset.z; som.clique(); renderRaid(); }));
+  $('zonas').querySelectorAll('[data-z]').forEach(el => el.addEventListener('click', () => {
+    if (!zonaLiberada(save, ZONAS[+el.dataset.z])) return aviso('Zona bloqueada');
+    zonaSel = +el.dataset.z; som.clique(); renderRaid();
+  }));
+
+  const bonus = MODIFICADORES.filter(m => modsSel.has(m.id)).reduce((a, m) => a + m.bonus, 0);
+  $('mods').innerHTML = MODIFICADORES.map(m => `<div class="mod ${modsSel.has(m.id) ? 'on' : ''}" data-mod="${m.id}">
+    <b>${m.icone} ${m.nome}</b> <span class="bon">+${Math.round(m.bonus * 100)}%</span><br>${m.desc}</div>`).join('') +
+    `<div style="align-self:center;font-weight:800;color:#7dff8e">Recompensa total: ×${(ZONAS[zonaSel].recompensa * (1 + bonus)).toFixed(2)}</div>`;
+  $('mods').querySelectorAll('[data-mod]').forEach(el => el.addEventListener('click', () => {
+    const id = el.dataset.mod;
+    if (modsSel.has(id)) modsSel.delete(id); else modsSel.add(id);
+    som.clique(); renderRaid();
+  }));
+
   const prim = armaPorUid(save, save.equip.primaria), sec = armaPorUid(save, save.equip.secundaria);
   const col = COLETES.find(c => c.id === save.colete);
   $('resumoLoadout').innerHTML = [prim, sec].filter(Boolean).map(a => `<div class="item" style="--cor:${TIERS[a.tier].cor};cursor:default"><img src="${miniatura(a)}"><div><div class="t">${TIERS[a.tier].nome}</div><div class="n">${a.nome}</div></div></div>`).join('') +
-    `<div class="item" style="--cor:#5ab0ff;cursor:default"><div><div class="t">Equipamento</div><div class="n">${col.nome} · 💣${save.granadas} · ✚${save.kits}</div></div></div>`;
+    `<div class="item" style="--cor:#5ab0ff;cursor:default"><div><div class="t">Equipamento · Nível ${save.nivel}</div><div class="n">${col.nome} · 💣${save.granadas} · ✚${save.kits} · ⚙${save.torretas || 0}</div></div></div>`;
   const s = save.stats;
-  $('estatisticas').innerHTML = `Raids: ${s.raids} · Extrações: ${s.extracoes} · Mortes: ${s.mortes} · Zumbis abatidos: ${s.abates}`;
+  $('estatisticas').innerHTML = `Raids: ${s.raids} · Extrações: ${s.extracoes} · Mortes: ${s.mortes} · Zumbis abatidos: ${s.abates} · Headshots: ${s.headshots || 0}`;
+}
+
+// ---------------- PERÍCIAS ----------------
+function renderPericias() {
+  const prox = xpProximo(save.nivel);
+  $('nivelBox').innerHTML = `<div class="nv">Nível ${save.nivel}</div>
+    <div class="xpBarra"><i style="width:${Math.min(100, save.xp / prox * 100)}%"></i></div>
+    <div style="font-size:12px;color:var(--fraco)">${save.xp} / ${prox} XP · Ganhe XP eliminando zumbis, extraindo e completando missões.
+    Cada nível dá 1 ponto de perícia.</div>
+    <div style="margin-top:6px;font-weight:800;color:#b080ff">Pontos disponíveis: ${save.pontos}</div>
+    <button class="btn mini" id="btnResetPer" style="margin-top:6px">Redistribuir pontos (${fmt(500)})</button>`;
+  $('periciasGrade').innerHTML = PERICIAS.map(p => {
+    const n = save.pericias[p.id] || 0;
+    return `<div class="pericia"><div class="ic">${p.icone}</div><div class="info"><b>${p.nome}</b><small>${p.desc}</small>
+      <div class="pontinhos">${Array.from({ length: p.max }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</div></div>
+      <button class="btn mini" data-per="${p.id}" ${save.pontos <= 0 || n >= p.max ? 'disabled' : ''}>+</button></div>`;
+  }).join('');
+  $('periciasGrade').querySelectorAll('[data-per]').forEach(b => b.addEventListener('click', () => {
+    if (save.pontos <= 0) return;
+    save.pericias[b.dataset.per] = (save.pericias[b.dataset.per] || 0) + 1;
+    save.pontos--; som.pegar(); render();
+  }));
+  $('btnResetPer').addEventListener('click', () => {
+    const gastos = Object.values(save.pericias).reduce((a, b) => a + b, 0);
+    if (!gastos) return aviso('Nenhum ponto gasto');
+    if (save.grana < 500) return aviso('Grana insuficiente');
+    save.grana -= 500; save.pontos += gastos; save.pericias = {}; som.clique(); render();
+  });
+}
+function ganharXp(qtd) {
+  save.xp += qtd;
+  let subiu = 0;
+  while (save.xp >= xpProximo(save.nivel)) { save.xp -= xpProximo(save.nivel); save.nivel++; save.pontos++; subiu++; }
+  return subiu;
+}
+
+// ---------------- MISSÕES ----------------
+function renderMissoes() {
+  $('missoesLista').innerHTML = save.missoes.map(m => {
+    const pronta = m.progresso >= m.qtd;
+    return `<div class="missao ${pronta ? 'pronta' : ''}"><h4>${m.desc}</h4>
+      <div class="xpBarra"><i style="width:${Math.min(100, m.progresso / m.qtd * 100)}%;background:linear-gradient(90deg,#2a8a3a,#7dff8e)"></i></div>
+      <div style="font-size:12px">${Math.min(m.progresso, m.qtd)} / ${m.qtd}</div>
+      <div class="rec">Recompensa: ${fmt(m.grana)} · ${m.xp} XP${m.arma ? ' · Arma Épica ou melhor' : ''}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn mini verde" data-resgatar="${m.id}" ${pronta ? '' : 'disabled'}>Resgatar</button>
+        <button class="btn mini" data-trocar="${m.id}" title="Trocar por outro contrato">Trocar (${fmt(100)})</button></div></div>`;
+  }).join('');
+  $('missoesLista').querySelectorAll('[data-resgatar]').forEach(b => b.addEventListener('click', () => {
+    const i = save.missoes.findIndex(m => m.id === b.dataset.resgatar);
+    const m = save.missoes[i];
+    save.grana += m.grana;
+    const subiu = ganharXp(m.xp);
+    let txt = `+${fmt(m.grana)} e ${m.xp} XP`;
+    if (m.arma) {
+      const a = novaArma(null, rolarTier(BOSS_PESOS));
+      if (save.inv.length < MAX_INV) save.inv.push(a); else save.grana += TIERS[a.tier].venda;
+      txt += ` · ${TIERS[a.tier].nome}: ${a.nome}`;
+    }
+    save.missoes[i] = gerarMissao(save);
+    som.raro();
+    aviso(txt + (subiu ? ` · SUBIU PARA O NÍVEL ${save.nivel}!` : ''), true);
+    render();
+  }));
+  $('missoesLista').querySelectorAll('[data-trocar]').forEach(b => b.addEventListener('click', () => {
+    if (save.grana < 100) return aviso('Grana insuficiente');
+    save.grana -= 100;
+    const i = save.missoes.findIndex(m => m.id === b.dataset.trocar);
+    save.missoes[i] = gerarMissao(save);
+    som.clique(); render();
+  }));
+}
+function progressoMissoes(r) {
+  for (const m of save.missoes) {
+    if (m.tipo === 'matar') m.progresso += r.placar.porTipo[m.alvo] || 0;
+    if (m.tipo === 'headshot') m.progresso += r.placar.headshots;
+    if (m.tipo === 'facao') m.progresso += r.placar.facao;
+    if (m.tipo === 'elite') m.progresso += r.placar.elite;
+    if (m.tipo === 'chefe') m.progresso += r.placar.chefes.filter(c => c === m.alvo).length;
+    if (m.tipo === 'extrair' && r.extraido && r.zonaId === m.alvo) m.progresso += 1;
+    if (m.tipo === 'sobreviver' && r.modo === 'sobrevivencia') m.progresso = Math.max(m.progresso, r.onda);
+  }
+}
+
+// ---------------- BESTIÁRIO ----------------
+const fotoCache = new Map();
+function fotoZumbi(tipo) {
+  if (fotoCache.has(tipo)) return fotoCache.get(tipo);
+  const m = criarZumbi(tipo);
+  m.rotation.y = Math.PI + 0.5;
+  thumbCena.add(m);
+  m.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(m);
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  m.position.sub(c);
+  thumbR.setSize(140, 180);
+  const cam = new THREE.PerspectiveCamera(30, 140 / 180, 0.1, 50);
+  const dist = Math.max(sz.y, sz.x / cam.aspect) * 0.5 / Math.tan(THREE.MathUtils.degToRad(15)) * 1.1;
+  cam.position.set(0, 0, dist); cam.lookAt(0, 0, 0);
+  thumbR.setClearColor(0, 0);
+  thumbR.render(thumbCena, cam);
+  const url = thumbR.domElement.toDataURL();
+  thumbR.setSize(240, 120);
+  thumbCena.remove(m);
+  m.traverse(o => { if (o.material) o.material.dispose(); });
+  fotoCache.set(tipo, url);
+  return url;
+}
+function renderBestiario() {
+  const porTipo = save.stats.porTipo || {};
+  const carta = ([tipo, d]) => {
+    const n = porTipo[tipo] || 0;
+    const visto = n > 0;
+    return `<div class="bicho ${visto ? '' : 'oculto'}"><img src="${fotoZumbi(tipo)}">
+      <div><h4>${visto ? d.nome : '???'}</h4>
+      <p>${visto ? d.desc : 'Elimine um para descobrir.'}</p>
+      ${visto ? `<p class="dica">💡 ${d.dica}</p>` : ''}
+      <div class="num">Vida base ${d.hp}${d.armadura ? ` · Armadura ${d.armadura}` : ''}${d.escudo ? ` · Escudo ${d.escudo}` : ''} · Abatidos: <b>${n}</b></div></div></div>`;
+  };
+  const lista = Object.entries(ZUMBIS);
+  $('bestZumbis').innerHTML = lista.filter(([, d]) => !d.boss).map(carta).join('');
+  $('bestChefes').innerHTML = lista.filter(([, d]) => d.boss).map(carta).join('');
 }
 
 $('btnIniciar').addEventListener('click', () => {
@@ -384,9 +546,9 @@ $('btnIniciar').addEventListener('click', () => {
   if (!prim && !sec) return aviso('Equipe pelo menos uma arma!');
   const zona = ZONAS[zonaSel];
   const col = COLETES.find(c => c.id === save.colete);
-  const loadout = { armas: [prim, sec], armadura: col.armadura, granadas: save.granadas, kits: save.kits };
+  const loadout = { armas: [prim, sec], armadura: col.armadura, granadas: save.granadas, kits: save.kits, torretas: save.torretas || 0, pericias: save.pericias };
   // consumíveis vão para a raid
-  save.granadas = 0; save.kits = 0;
+  save.granadas = 0; save.kits = 0; save.torretas = 0;
   save.stats.raids++;
   gravar();
   $('lobby').style.display = 'none';
@@ -394,17 +556,31 @@ $('btnIniciar').addEventListener('click', () => {
   if (mobile && document.documentElement.requestFullscreen && !document.fullscreenElement) {
     document.documentElement.requestFullscreen().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
   }
-  raidAtual = iniciarRaid({ canvas: $('jogo'), zona, loadout, opcoes: save.opcoes, mobile, onFim: fimRaid });
+  raidAtual = iniciarRaid({ canvas: $('jogo'), zona, loadout, opcoes: save.opcoes, mobile, onFim: fimRaid, modo, mods: [...modsSel] });
 });
 
 function fimRaid(r) {
   raidAtual = null;
   save.granadas = Math.min(CONSUMIVEIS.granadas.max, r.granadas);
   save.kits = Math.min(CONSUMIVEIS.kits.max, r.kits);
+  save.torretas = Math.min(CONSUMIVEIS.torretas.max, r.torretas);
   save.grana += r.ganho;
   save.stats.abates += r.abates;
+  save.stats.headshots = (save.stats.headshots || 0) + r.placar.headshots;
+  save.stats.porTipo = save.stats.porTipo || {};
+  for (const [t, n] of Object.entries(r.placar.porTipo)) save.stats.porTipo[t] = (save.stats.porTipo[t] || 0) + n;
   save.stats.melhorOnda = Math.max(save.stats.melhorOnda, r.onda);
+  if (r.modo === 'sobrevivencia') save.stats.melhorSobrevivencia = Math.max(save.stats.melhorSobrevivencia || 0, r.onda);
   if (r.extraido) save.stats.extracoes++; else save.stats.mortes++;
+  let zonaNova = null;
+  if (r.extraido && r.modo === 'raid' && !save.zonasExtraidas.includes(r.zonaId)) {
+    save.zonasExtraidas.push(r.zonaId);
+    zonaNova = ZONAS.find(z => z.requer === r.zonaId);
+  }
+  const xpGanho = r.extraido ? r.xp : Math.round(r.xp * 0.5);
+  const subiu = ganharXp(xpGanho);
+  progressoMissoes(r);
+  const prontas = save.missoes.filter(m => m.progresso >= m.qtd).length;
   let vendidas = 0;
   for (const a of r.armas) {
     if (save.inv.length < MAX_INV) save.inv.push(a);
@@ -415,7 +591,11 @@ function fimRaid(r) {
   $('lobby').style.display = '';
   $('resTitulo').textContent = r.extraido ? 'EXTRAÍDO!' : 'VOCÊ MORREU';
   $('resTitulo').style.color = r.extraido ? '#40ff80' : '#ff4040';
-  $('resInfo').innerHTML = `Onda alcançada: <b>${Math.min(r.onda, r.ondas)}/${r.ondas}</b> · Zumbis abatidos: <b>${r.abates}</b><br>
+  $('resInfo').innerHTML = `Onda alcançada: <b>${r.modo === 'sobrevivencia' ? r.onda : Math.min(r.onda, r.ondas) + '/' + r.ondas}</b> · Zumbis abatidos: <b>${r.abates}</b> · Headshots: <b>${r.placar.headshots}</b><br>
+    XP: <b style="color:#b080ff">+${xpGanho}</b>${subiu ? ` · <b style="color:#ffd020">SUBIU PARA O NÍVEL ${save.nivel}! (+${subiu} ponto${subiu > 1 ? 's' : ''} de perícia)</b>` : ''}<br>
+    ${r.placar.chefes.length ? `Chefes derrotados: <b style="color:#ff7090">${r.placar.chefes.map(c => ZUMBIS[c].nome).join(', ')}</b><br>` : ''}
+    ${zonaNova ? `<b style="color:#40ff80">🔓 NOVA ZONA LIBERADA: ${zonaNova.nome}!</b><br>` : ''}
+    ${prontas ? `<b style="color:#7dff8e">✔ ${prontas} missão(ões) pronta(s) para resgatar!</b><br>` : ''}
     Grana: <b style="color:#7dff8e">+${fmt(r.ganho)}</b>${r.bonus ? ` (inclui bônus de extração ${fmt(r.bonus)})` : ' (morto: só 30% da grana foi salva)'}<br>
     ${r.extraido ? (r.armas.length ? `Armas recuperadas: <b>${r.armas.length}</b>${vendidas ? ` (${vendidas} vendidas, arsenal cheio)` : ''}` : 'Nenhuma arma encontrada.')
       : (r.perdidas.length ? `<span style="color:#ff8080">${r.perdidas.length} arma(s) da mochila foram perdidas.</span>` : '')}`;
@@ -442,10 +622,13 @@ function renderOpcoes() {
     el.innerHTML = `
       <label>Sensibilidade da câmera <input type="range" min="0.3" max="2.5" step="0.1" value="${o.sens}" data-op="sens"></label>
       <label><span>Mira assistida<br><small>a mira gruda nos zumbis</small></span><input type="checkbox" data-op="assist" ${assist ? 'checked' : ''}></label>
-      <label><span>Tiro automático<br><small>atira sozinho com a mira no zumbi</small></span><input type="checkbox" data-op="autoTiro" ${auto ? 'checked' : ''}></label>`;
+      <label><span>Tiro automático<br><small>atira sozinho com a mira no zumbi</small></span><input type="checkbox" data-op="autoTiro" ${auto ? 'checked' : ''}></label>
+      <label><span>Qualidade gráfica<br><small>vale a partir da próxima raid</small></span><select data-op="qualidade">
+        ${[['baixo', 'Baixa (celular fraco)'], ['medio', 'Média'], ['alto', 'Alta (sombras)']].map(([v, n]) => `<option value="${v}" ${(o.qualidade || (mobile ? 'medio' : 'alto')) === v ? 'selected' : ''}>${n}</option>`).join('')}
+      </select></label>`;
     el.querySelectorAll('[data-op]').forEach(inp => inp.addEventListener('input', () => {
       const k = inp.dataset.op;
-      o[k] = inp.type === 'checkbox' ? inp.checked : +inp.value;
+      o[k] = inp.type === 'checkbox' ? inp.checked : inp.tagName === 'SELECT' ? inp.value : +inp.value;
       gravar();
       if (inp.type === 'checkbox') renderOpcoes();
     }));
@@ -458,8 +641,8 @@ $('btnReset').addEventListener('click', () => {
 });
 
 let avisoT = 0;
-function aviso(msg) {
-  som.seco();
+function aviso(msg, bom) {
+  if (!bom) som.seco();
   let el = $('aviso');
   if (!el) {
     el = document.createElement('div'); el.id = 'aviso';
@@ -467,9 +650,35 @@ function aviso(msg) {
     document.body.appendChild(el);
   }
   el.textContent = msg; el.style.opacity = 1;
+  el.style.background = bom ? '#0a3a14' : '#400'; el.style.borderColor = bom ? '#4f8' : '#f44';
   clearTimeout(avisoT); avisoT = setTimeout(() => el.style.opacity = 0, 1800);
 }
 
 document.addEventListener('pointerdown', () => iniciarAudio(), { once: true });
-$('carregando').remove();
+// fundo animado da base: silhueta da cidade com janelas e brasas subindo
+(function fundoBase() {
+  let x = 0, svg = '';
+  while (x < 1600) {
+    const w = 40 + Math.random() * 90, h = 80 + Math.random() * 260;
+    svg += `<rect x="${x}" y="${400 - h}" width="${w}" height="${h}" fill="#07070a"/>`;
+    for (let wy = 400 - h + 12; wy < 390; wy += 18) for (let wx = x + 8; wx < x + w - 10; wx += 14) {
+      const r = Math.random();
+      if (r < 0.06) svg += `<rect x="${wx}" y="${wy}" width="6" height="8" fill="${r < 0.015 ? '#ff5030' : '#f0b050'}" opacity="${0.5 + Math.random() * 0.5}"/>`;
+    }
+    if (Math.random() < 0.25) svg += `<rect x="${x + w / 2}" y="${400 - h - 30}" width="2" height="30" fill="#07070a"/>`;
+    x += w + Math.random() * 6;
+  }
+  $('skyline').innerHTML = `<svg viewBox="0 0 1600 400" preserveAspectRatio="xMidYMax slice" width="100%" height="100%">${svg}</svg>`;
+  const br = $('brasas');
+  for (let i = 0; i < 28; i++) {
+    const e = document.createElement('i');
+    e.style.left = Math.random() * 100 + '%';
+    e.style.animationDelay = -Math.random() * 12 + 's';
+    e.style.animationDuration = 8 + Math.random() * 8 + 's';
+    e.style.setProperty('--dx', (Math.random() * 120 - 60) + 'px');
+    br.appendChild(e);
+  }
+})();
+$('carregando').classList.add('saindo');
+setTimeout(() => $('carregando').remove(), 600);
 render();

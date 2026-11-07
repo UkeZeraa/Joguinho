@@ -1,7 +1,8 @@
 // Raid em primeira pessoa: mapa, jogador, armas, zumbis, ondas e extração.
 import * as THREE from 'three';
-import { TIPOS, TIERS, ZUMBIS, BOSS_PESOS, stats, rolarTier, novaArma, fmt } from './dados.js';
-import { criarArma, criarZumbi, texChao, texPredio, texCaixa, texBrilho } from './modelos.js';
+import { TIPOS, TIERS, ZUMBIS, BOSS_PESOS, MODIFICADORES, stats, rolarTier, novaArma, fmt } from './dados.js';
+import { criarArma, criarZumbi, criarFacao, criarTorreta, texCaixa, texBrilho, mesclar } from './modelos.js';
+import * as VIS from './visual.js';
 import { som } from './audio.js';
 
 const L = 42;            // metade do tamanho do mapa
@@ -25,6 +26,7 @@ function pegarRenderer(canvas) {
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const rand = (a, b) => a + Math.random() * (b - a);
+const escolher = a => a[Math.floor(Math.random() * a.length)];
 
 // Raio x caixa alinhada (slab). Retorna t ou -1
 function raioCaixa(ox, oy, oz, dx, dy, dz, minx, miny, minz, maxx, maxy, maxz, tmax) {
@@ -52,11 +54,22 @@ function raioEsfera(ox, oy, oz, dx, dy, dz, cx, cy, cz, r) {
   return tca - Math.sqrt(r * r - d2);
 }
 
-export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
+export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo = 'raid', mods = [] }) {
   const R = pegarRenderer(canvas);
+  const mod = new Set(mods);
+  const sobrevivencia = modo === 'sobrevivencia';
+  const per = loadout.pericias || {};
+  const nv = k => per[k] || 0;
+  const bonusMods = MODIFICADORES.filter(m => mod.has(m.id)).reduce((a, m) => a + m.bonus, 0);
+  const recompensa = zona.recompensa * (1 + bonusMods);
+  const TOTAL_ONDAS = sobrevivencia ? Infinity : zona.ondas;
+  const qual = VIS.qualidade(opcoes, mobile);
+  const alto = qual === 'alto';
   const cena = new THREE.Scene();
-  cena.background = new THREE.Color(zona.ceu);
-  cena.fog = new THREE.FogExp2(zona.neblina, 0.032);
+  const corCeu = mod.has('lua') ? 0x2a0404 : zona.ceu;
+  const corNeblina = mod.has('lua') ? 0x3a0808 : zona.neblina;
+  cena.background = new THREE.Color(corNeblina);
+  cena.fog = new THREE.FogExp2(corNeblina, mod.has('escuridao') ? 0.07 : 0.03);
 
   const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 200);
   camera.rotation.order = 'YXZ';
@@ -64,46 +77,63 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
 
   // Cena separada só para a arma na mão (não atravessa paredes)
   const vmCena = new THREE.Scene();
-  const vmCam = new THREE.PerspectiveCamera(65, 1, 0.01, 10);
+  const vmCam = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
   vmCena.add(vmCam);
-  vmCena.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const vmSol = new THREE.DirectionalLight(0xffffff, 2.2);
-  vmSol.position.set(0.5, 1, 0.6);
+  vmCena.add(new THREE.AmbientLight(0xffffff, 0.35));
+  vmCena.add(new THREE.HemisphereLight(mod.has('lua') ? 0xff8070 : zona.luz, 0x201810, 0.6));
+  const vmSol = new THREE.DirectionalLight(0xfff0e0, 2.4);
+  vmSol.position.set(0.6, 1, 0.4);
   vmCena.add(vmSol);
-  const vmLuzTier = new THREE.PointLight(0xffffff, 0.6, 1.2, 1);
+  const vmLuzTier = new THREE.PointLight(0xffffff, 0.8, 1.4, 1);
   vmLuzTier.position.set(0.2, -0.1, -0.5);
   vmCena.add(vmLuzTier);
+  const vmLuzTiro = new THREE.PointLight(0xffb060, 0, 2, 1);
+  vmLuzTiro.position.set(0.15, -0.1, -0.9);
+  vmCena.add(vmLuzTiro);
 
   // ---------- luzes ----------
-  cena.add(new THREE.HemisphereLight(zona.luz, 0x202020, 0.55));
-  const lua = new THREE.DirectionalLight(zona.luz, 0.45);
-  lua.position.set(-20, 40, -10);
-  cena.add(lua);
-  const lanterna = new THREE.SpotLight(0xfff4dd, 60, 40, 0.48, 0.55, 1.2);
+  const luaDir = new THREE.Vector3(-0.45, 0.55, -0.7).normalize();
+  const hemi = new THREE.HemisphereLight(mod.has('lua') ? 0xff4030 : zona.luz, 0x2a2420, mod.has('escuridao') ? 0.3 : 0.75);
+  cena.add(hemi);
+  const lua = new THREE.DirectionalLight(mod.has('lua') ? 0xff7060 : zona.luz, alto ? 0.8 : 0.5);
+  lua.position.copy(luaDir).multiplyScalar(50);
+  cena.add(lua); cena.add(lua.target);
+  if (alto) {
+    lua.castShadow = true;
+    lua.shadow.mapSize.set(2048, 2048);
+    Object.assign(lua.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 120 });
+    lua.shadow.bias = -0.0006;
+  }
+  const lanterna = new THREE.SpotLight(0xfff4dd, mod.has('escuridao') ? 18 : 30, mod.has('escuridao') ? 22 : 40, 0.5, 0.6, 1.4);
   lanterna.position.set(0.15, -0.1, 0);
   camera.add(lanterna);
   const alvoLanterna = new THREE.Object3D();
   alvoLanterna.position.set(0, -0.05, -5);
   camera.add(alvoLanterna);
   lanterna.target = alvoLanterna;
+  if (alto) { lanterna.castShadow = true; lanterna.shadow.mapSize.set(512, 512); lanterna.shadow.bias = -0.0008; lanterna.shadow.camera.near = 0.5; }
   const luzTiro = new THREE.PointLight(0xffc070, 0, 14, 1.5);
   camera.add(luzTiro);
 
   const descartaveis = [];
   const reg = o => { descartaveis.push(o); return o; };
+  const sombra = (o, recebe = true) => { if (alto) o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = recebe; } }); return o; };
+
+  // céu, clima e névoa
+  const nCeu = new THREE.Color(corNeblina);
+  const ceu = VIS.criarCeu(cena, new THREE.Color(corCeu).multiplyScalar(0.6), nCeu.clone().multiplyScalar(1.3), nCeu.clone().multiplyScalar(1.6), luaDir);
+  const clima = VIS.criarClima(cena, zona.id, qual, mod.has('lua'));
+  const nevoa = VIS.criarNevoa(cena, new THREE.Color(corNeblina).multiplyScalar(2.2).getHex(), qual);
+  const marcas = VIS.criarMarcas(cena, qual);
+  let relampago = 0, proxRelampago = rand(6, 14);
 
   // ---------- mapa ----------
   const obst = [];      // {minx,maxx,minz,maxz,h,tipo,mesh}
-  const chaoTex = reg(texChao(zona.chao));
-  chaoTex.repeat.set(L / 4, L / 4);
-  const chao = new THREE.Mesh(new THREE.PlaneGeometry(L * 2, L * 2), new THREE.MeshLambertMaterial({ map: chaoTex }));
-  chao.rotation.x = -Math.PI / 2;
-  cena.add(chao);
-
-  const texPredios = ['#5a5550', '#4a4e58', '#6a5a48', '#3e4440'].map(c => reg(texPredio(c)));
   const tCaixa = reg(texCaixa());
   const matCaixa = new THREE.MeshLambertMaterial({ map: tCaixa });
   const geoCaixa = new THREE.BoxGeometry(1, 1, 1);
+  const matVC = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }); // peças mescladas com cor por vértice
+  const malhaVC = (partes, mat = matVC) => sombra(new THREE.Mesh(mesclar(partes), mat));
 
   function addObst(cx, cz, w, d, h, tipo, mesh) {
     const o = { minx: cx - w / 2, maxx: cx + w / 2, minz: cz - d / 2, maxz: cz + d / 2, h, tipo, mesh };
@@ -118,70 +148,143 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     }
     return Math.abs(cx) + w / 2 < L - 9 && Math.abs(cz) + d / 2 < L - 9;
   }
-  function predio(cx, cz, w, d, h) {
-    const t = texPredios[Math.floor(Math.random() * texPredios.length)].clone();
-    t.needsUpdate = true;
-    t.repeat.set(Math.max(1, Math.round(Math.max(w, d) / 5)), Math.max(1, Math.round(h / 8)));
-    reg(t);
-    const m = new THREE.Mesh(geoCaixa, new THREE.MeshLambertMaterial({ map: t }));
+
+  // prédios com fachadas, telhado, lojas e letreiros
+  const fachadas = [0, 1, 2, 3, 4].map(i => { const f = VIS.texFachada(i); reg(f.map); reg(f.emissiveMap); return f; });
+  const texTeto = reg(VIS.texTelhado());
+  const matTeto = new THREE.MeshLambertMaterial({ map: texTeto });
+  const texLojas = [VIS.texLoja(), VIS.texLoja(), VIS.texLoja()].map(reg);
+  const NOMES = { suburbio: ['FARMÁCIA', 'MERCADO', 'BAR', 'LANCHES', 'PADARIA'], centro: ['HOTEL', 'CINEMA', 'BAR 24H', 'BANCO', 'BOATE'],
+    lab: ['X-13', 'BIOLAB', 'SETOR C', 'QUARENTENA'], base: ['QG', 'ARSENAL', 'ENFERMARIA', 'HANGAR'], ninho: ['HOSPITAL', 'IGREJA', 'MOTEL', 'ABRIGO'] }[zona.id] || ['BAR'];
+  const CORES_NEON = ['#ff3a60', '#40e0ff', '#ffd040', '#60ff80', '#ff60ff', '#ff8020'];
+  const neons = [];
+  let nLetreiros = 0;
+  function matFachada(i, rx, ry) {
+    const f = fachadas[i];
+    const map = f.map.clone(), em = f.emissiveMap.clone();
+    map.needsUpdate = em.needsUpdate = true;
+    map.repeat.set(rx, ry); em.repeat.set(rx, ry);
+    reg(map); reg(em);
+    return new THREE.MeshLambertMaterial({ map, emissiveMap: em, emissive: 0xffffff, emissiveIntensity: mod.has('escuridao') ? 0.6 : 1 });
+  }
+  function predio(cx, cz, w, d, h, faces) {
+    const est = Math.floor(Math.random() * fachadas.length);
+    const ry = Math.max(1, Math.round(h / 9)), mx = matFachada(est, Math.max(1, Math.round(d / 7)), ry), mz = matFachada(est, Math.max(1, Math.round(w / 7)), ry);
+    const m = new THREE.Mesh(geoCaixa, [mx, mx, matTeto, matTeto, mz, mz]);
     m.scale.set(w, h, d);
     m.position.set(cx, h / 2, cz);
-    cena.add(m);
+    cena.add(sombra(m));
     addObst(cx, cz, w, d, h, 'predio', m);
+    // mureta e coisas no telhado
+    const pt = [];
+    const cor = 0x3a3836;
+    pt.push({ w: w, h: 0.6, d: 0.25, x: 0, y: h + 0.3, z: -d / 2 + 0.12, cor }, { w: w, h: 0.6, d: 0.25, x: 0, y: h + 0.3, z: d / 2 - 0.12, cor },
+      { w: 0.25, h: 0.6, d: d, x: -w / 2 + 0.12, y: h + 0.3, z: 0, cor }, { w: 0.25, h: 0.6, d: d, x: w / 2 - 0.12, y: h + 0.3, z: 0, cor });
+    for (let i = 0; i < Math.floor(rand(1, 4)); i++) pt.push({ w: rand(0.8, 1.6), h: rand(0.6, 1.0), d: rand(0.8, 1.4), x: rand(-w / 3, w / 3), y: h + 0.4, z: rand(-d / 3, d / 3), cor: 0x6a6e72 });
+    if (Math.random() < 0.4) pt.push({ g: 'cil', w: 1.6, h: 1.8, d: 1.6, x: rand(-w / 4, w / 4), y: h + 1.6, z: rand(-d / 4, d / 4), cor: 0x4a3a2a }, { w: 0.1, h: 1.2, d: 0.1, x: 0, y: h + 0.6, z: 0, cor: 0x2a2a2a });
+    if (Math.random() < 0.3) pt.push({ w: 0.08, h: 3, d: 0.08, x: rand(-w / 3, w / 3), y: h + 1.5, z: rand(-d / 3, d / 3), cor: 0x8a8a8a });
+    const topo = malhaVC(pt);
+    topo.position.set(cx, 0, cz);
+    cena.add(topo);
+    // lojas no térreo e letreiros de neon nas faces voltadas para a rua
+    for (const [nx, nz] of faces) {
+      const larg = Math.min(nx ? d : w, 8);
+      const loja = new THREE.Mesh(new THREE.PlaneGeometry(larg, 3.4), new THREE.MeshLambertMaterial({ map: escolher(texLojas) }));
+      loja.position.set(cx + nx * (w / 2 + 0.02), 1.7, cz + nz * (d / 2 + 0.02));
+      loja.rotation.y = Math.atan2(nx, nz);
+      cena.add(loja);
+      const toldo = new THREE.Mesh(geoCaixa, new THREE.MeshLambertMaterial({ color: escolher([0x8a2020, 0x204a8a, 0x2a6a2a, 0x7a5a20]) }));
+      toldo.scale.set(nx ? 1.2 : larg, 0.12, nz ? 1.2 : larg);
+      toldo.position.set(cx + nx * (w / 2 + 0.6), 3.55, cz + nz * (d / 2 + 0.6));
+      toldo.rotation[nx ? 'z' : 'x'] = (nx || nz) * -0.25;
+      cena.add(toldo);
+      if (nLetreiros < (qual === 'baixo' ? 4 : 9) && Math.random() < 0.7) {
+        nLetreiros++;
+        const corN = escolher(CORES_NEON);
+        const placa = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: reg(VIS.texLetreiro(escolher(NOMES), corN)), toneMapped: false }));
+        placa.position.set(cx + nx * (w / 2 + 0.05), 4.3, cz + nz * (d / 2 + 0.05));
+        placa.rotation.y = Math.atan2(nx, nz);
+        cena.add(placa);
+        neons.push({ m: placa, pisca: Math.random() < 0.45, t: rand(0, 5) });
+      }
+    }
   }
   // borda da cidade
   for (const lado of [0, 1, 2, 3]) {
     let p = -L;
+    const face = [[0, 1], [0, -1], [1, 0], [-1, 0]][lado];
     while (p < L) {
       const larg = Math.min(rand(8, 14), L - p);
       const prof = rand(7, 10);
-      const h = rand(7, 20);
+      const h = rand(7, 22);
       const meio = p + larg / 2;
-      if (lado === 0) predio(meio, -L + prof / 2, larg, prof, h);
-      if (lado === 1) predio(meio, L - prof / 2, larg, prof, h);
-      if (lado === 2) predio(-L + prof / 2, meio, prof, larg, h);
-      if (lado === 3) predio(L - prof / 2, meio, prof, larg, h);
+      const faces = Math.abs(meio) < 30 && Math.random() < 0.55 ? [face] : [];
+      if (lado === 0) predio(meio, -L + prof / 2, larg, prof, h, faces);
+      if (lado === 1) predio(meio, L - prof / 2, larg, prof, h, faces);
+      if (lado === 2) predio(-L + prof / 2, meio, prof, larg, h, faces);
+      if (lado === 3) predio(L - prof / 2, meio, prof, larg, h, faces);
       p += larg;
     }
   }
   // quarteirões internos
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) predio(sx * 17, sz * 17, rand(8, 11), rand(8, 11), rand(8, 16));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) predio(sx * 17, sz * 17, rand(8, 11), rand(8, 11), rand(8, 18), [[-sx, 0], [0, -sz]]);
 
-  // carros
-  const coresCarro = [0x7a1a1a, 0x1a3a6a, 0x2a2a2a, 0x8a8a8a, 0x5a5a20, 0x1a4a2a, 0xa06010];
-  const matVidro = new THREE.MeshLambertMaterial({ color: 0x0a0e14 });
-  const matPneu = new THREE.MeshLambertMaterial({ color: 0x0b0b0b });
-  const geoRoda = new THREE.CylinderGeometry(0.36, 0.36, 0.25, 10);
+  // carros detalhados (peças mescladas)
+  const coresCarro = [0x7a1a1a, 0x1a3a6a, 0x2a2a2a, 0x8a8a8a, 0x5a5a20, 0x1a4a2a, 0xa06010, 0xd0d0d0, 0x3a1a4a];
   const fogos = [];
+  const piscas = [];
   function carro(cx, cz, giro, queimado) {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({ color: queimado ? 0x1a1410 : coresCarro[Math.floor(Math.random() * coresCarro.length)] });
-    const base = new THREE.Mesh(geoCaixa, mat); base.scale.set(4.2, 0.75, 1.9); base.position.y = 0.68; g.add(base);
-    const cab = new THREE.Mesh(geoCaixa, mat); cab.scale.set(2.2, 0.6, 1.75); cab.position.set(-0.2, 1.35, 0); g.add(cab);
-    const vid = new THREE.Mesh(geoCaixa, matVidro); vid.scale.set(2.25, 0.45, 1.8); vid.position.set(-0.2, 1.36, 0); g.add(vid);
-    for (const [x, z] of [[1.3, 0.85], [-1.3, 0.85], [1.3, -0.85], [-1.3, -0.85]]) {
-      const r = new THREE.Mesh(geoRoda, matPneu); r.rotation.x = Math.PI / 2; r.position.set(x, 0.36, z); g.add(r);
+    const cor = queimado ? 0x1c1612 : escolher(coresCarro), vidro = queimado ? 0x050505 : 0x0e141c, preto = 0x111111, cromo = queimado ? 0x2a2a2a : 0x9a9a9a;
+    const p = [];
+    p.push({ w: 4.2, h: 0.55, d: 1.85, x: 0, y: 0.6, cor }, { w: 4.25, h: 0.12, d: 1.88, x: 0, y: 0.35, cor: preto });
+    p.push({ w: 2.2, h: 0.55, d: 1.7, x: -0.25, y: 1.15, cor }, { w: 2.25, h: 0.4, d: 1.72, x: -0.25, y: 1.17, cor: vidro });
+    p.push({ w: 0.6, h: 0.45, d: 1.6, x: 0.95, y: 1.05, rz: 0.8, cor: vidro }, { w: 0.5, h: 0.4, d: 1.6, x: -1.45, y: 1.05, rz: -0.7, cor: vidro });
+    p.push({ w: 0.15, h: 0.25, d: 1.9, x: 2.12, y: 0.55, cor: cromo }, { w: 0.15, h: 0.25, d: 1.9, x: -2.12, y: 0.55, cor: cromo });
+    for (const s of [-1, 1]) {
+      p.push({ w: 0.06, h: 0.12, d: 0.35, x: 2.18, y: 0.72, z: s * 0.65, cor: queimado ? preto : 0xf0f0d0 });
+      p.push({ w: 0.06, h: 0.12, d: 0.3, x: -2.18, y: 0.72, z: s * 0.65, cor: queimado ? preto : 0x9a1010 });
+      p.push({ w: 0.02, h: 0.4, d: 0.02, x: 0.2, y: 0.75, z: s * 0.93, cor: preto }, { w: 0.02, h: 0.4, d: 0.02, x: -0.8, y: 0.75, z: s * 0.93, cor: preto });
+      p.push({ w: 0.12, h: 0.1, d: 0.12, x: 0.55, y: 1.0, z: s * 1.0, cor });
+      for (const x of [1.3, -1.3]) {
+        p.push({ g: 'cil', w: 0.72, h: 0.26, d: 0.72, x, y: 0.36, z: s * 0.85, rx: Math.PI / 2, cor: preto });
+        p.push({ g: 'cil', w: 0.4, h: 0.27, d: 0.4, x, y: 0.36, z: s * 0.85, rx: Math.PI / 2, cor: cromo });
+      }
     }
-    g.position.set(cx, 0, cz);
-    g.rotation.y = giro ? Math.PI / 2 : 0;
-    g.rotation.y += rand(-0.05, 0.05);
-    cena.add(g);
-    addObst(cx, cz, giro ? 1.9 : 4.2, giro ? 4.2 : 1.9, 1.65, 'carro', g);
+    if (!queimado && Math.random() < 0.5) p.push({ w: 0.9, h: 0.05, d: 0.7, x: 1.3, y: 0.9, z: 0, rz: 0.4, cor }); // capô aberto
+    if (queimado) for (let i = 0; i < 8; i++) p.push({ w: rand(0.3, 0.8), h: 0.02, d: rand(0.3, 0.8), x: rand(-1.8, 1.8), y: 0.89, z: rand(-0.8, 0.8), cor: 0x5a3010 });
+    const m = malhaVC(p);
+    m.position.set(cx, 0, cz);
+    m.rotation.y = (giro ? Math.PI / 2 : 0) + rand(-0.06, 0.06);
+    cena.add(m);
+    addObst(cx, cz, giro ? 1.9 : 4.2, giro ? 4.2 : 1.9, 1.65, 'carro', m);
     if (queimado) {
       const luz = new THREE.PointLight(0xff6a20, 25, 16, 1.3);
       luz.position.set(cx, 2.2, cz);
       cena.add(luz);
-      fogos.push({ luz, x: cx, z: cz });
+      fogos.push({ luz, x: cx, z: cz, larg: 1.2 });
     }
   }
-  const queimados = zona.id === 'centro' ? 3 : zona.id === 'lab' ? 1 : 0;
+  const queimados = zona.id === 'centro' ? 3 : zona.id === 'lab' || zona.id === 'base' ? 1 : 0;
   let nCarros = 0, tent = 0;
   while (nCarros < 14 && tent++ < 400) {
     const giro = Math.random() < 0.5;
     const cx = rand(-32, 32), cz = rand(-32, 32);
     if (livre(cx, cz, giro ? 1.9 : 4.2, giro ? 4.2 : 1.9, 2.2)) { carro(cx, cz, giro, nCarros < queimados); nCarros++; }
   }
-  // caixas
+  // viatura de polícia com sirene
+  if (zona.id !== 'ninho') {
+    for (let t = 0; t < 100; t++) {
+      const giro = Math.random() < 0.5, cx = rand(-28, 28), cz = rand(-28, 28);
+      if (!livre(cx, cz, giro ? 1.9 : 4.3, giro ? 4.3 : 1.9, 2.2)) continue;
+      const v = VIS.viatura();
+      v.position.set(cx, 0, cz); v.rotation.y = giro ? Math.PI / 2 : 0;
+      cena.add(sombra(v));
+      addObst(cx, cz, giro ? 1.9 : 4.3, giro ? 4.3 : 1.9, 1.6, 'carro', v);
+      piscas.push(v.userData);
+      break;
+    }
+  }
+  // caixas de suprimento
   tent = 0; let nCx = 0;
   while (nCx < 12 && tent++ < 400) {
     const cx = rand(-32, 32), cz = rand(-32, 32), s = rand(1.0, 1.4);
@@ -192,62 +295,137 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       m.scale.setScalar(s * (i ? 0.85 : 1));
       m.position.set(cx + rand(-0.05, 0.05), s / 2 + i * s * 0.92, cz);
       m.rotation.y = rand(-0.2, 0.2);
-      cena.add(m);
+      cena.add(sombra(m));
     }
     addObst(cx, cz, s, s, s * pilha, 'caixa');
     nCx++;
   }
-  // barreiras de concreto
-  const matConcreto = new THREE.MeshLambertMaterial({ color: 0x8a8a82 });
+  // barreiras de concreto (formato New Jersey, com faixas)
   tent = 0; let nB = 0;
   while (nB < 8 && tent++ < 300) {
     const giro = Math.random() < 0.5;
     const w = giro ? 0.6 : 3, d = giro ? 3 : 0.6;
     const cx = rand(-30, 30), cz = rand(-30, 30);
     if (!livre(cx, cz, w, d, 2.5)) continue;
-    const m = new THREE.Mesh(geoCaixa, matConcreto);
-    m.scale.set(w, 1.0, d); m.position.set(cx, 0.5, cz);
+    const p = [{ w: 3, h: 0.35, d: 0.7, x: 0, y: 0.175, cor: 0x8a8a82 }, { w: 3, h: 0.65, d: 0.32, x: 0, y: 0.67, cor: 0x92928a }];
+    for (let i = 0; i < 4; i++) p.push({ w: 0.25, h: 0.2, d: 0.33, x: -1.1 + i * 0.75, y: 0.8, rz: 0.6, cor: i % 2 ? 0xd0a020 : 0x1a1a1a });
+    const m = malhaVC(p);
+    m.position.set(cx, 0, cz); m.rotation.y = giro ? Math.PI / 2 : 0;
     cena.add(m);
     addObst(cx, cz, w, d, 1.0, 'barreira');
     nB++;
   }
+  // sacos de areia (mais na base militar)
+  const nSacos = zona.id === 'base' ? 8 : zona.id === 'ninho' ? 0 : 2;
+  tent = 0; let nS = 0;
+  while (nS < nSacos && tent++ < 300) {
+    const giro = Math.random() < 0.5, comp = rand(2.4, 3.6);
+    const w = giro ? 0.5 : comp, d = giro ? comp : 0.5;
+    const cx = rand(-30, 30), cz = rand(-30, 30);
+    if (!livre(cx, cz, w, d, 2.5)) continue;
+    const sacos = VIS.sacosDeAreia(comp);
+    sacos.position.set(cx, 0, cz); sacos.rotation.y = giro ? Math.PI / 2 : 0;
+    cena.add(sombra(sacos));
+    addObst(cx, cz, w, d, 0.9, 'barreira');
+    nS++;
+  }
   // barris explosivos
   const barris = [];
-  const matBarril = new THREE.MeshLambertMaterial({ color: 0xb02010 });
-  const matFaixa = new THREE.MeshBasicMaterial({ color: 0xffd020 });
-  const geoBarril = new THREE.CylinderGeometry(0.42, 0.42, 1.15, 12);
-  const geoFaixa = new THREE.CylinderGeometry(0.43, 0.43, 0.12, 12);
   tent = 0;
   while (barris.length < 9 && tent++ < 300) {
     const cx = rand(-30, 30), cz = rand(-30, 30);
     if (!livre(cx, cz, 0.84, 0.84, 2)) continue;
-    const g = new THREE.Group();
-    const b = new THREE.Mesh(geoBarril, matBarril); b.position.y = 0.575; g.add(b);
-    const f = new THREE.Mesh(geoFaixa, matFaixa); f.position.y = 0.8; g.add(f);
+    const p = [
+      { g: 'cil', w: 0.84, h: 1.15, d: 0.84, y: 0.575, cor: 0xb02010 },
+      { g: 'cil', w: 0.87, h: 0.06, d: 0.87, y: 0.3, cor: 0x7a1408 }, { g: 'cil', w: 0.87, h: 0.06, d: 0.87, y: 0.85, cor: 0x7a1408 },
+      { g: 'cil', w: 0.86, h: 0.12, d: 0.86, y: 0.6, cor: 0xffd020 },
+      { g: 'cil', w: 0.7, h: 0.02, d: 0.7, y: 1.16, cor: 0x5a1008 }, { g: 'cil', w: 0.12, h: 0.06, d: 0.12, x: 0.2, y: 1.18, cor: 0x3a3a3a },
+    ];
+    const g = malhaVC(p);
     g.position.set(cx, 0, cz);
     cena.add(g);
     const o = addObst(cx, cz, 0.84, 0.84, 1.15, 'barril', g);
     o.hp = 40;
     barris.push(o);
   }
-  // postes de luz
-  const matPoste = new THREE.MeshLambertMaterial({ color: 0x30343a });
-  const matLampada = new THREE.MeshBasicMaterial({ color: 0xffe0a0 });
-  for (const [px, pz] of [[-8, 8], [8, -8], [-26, -4], [26, 6]]) {
-    const poste = new THREE.Mesh(geoCaixa, matPoste); poste.scale.set(0.18, 6, 0.18); poste.position.set(px, 3, pz); cena.add(poste);
-    const lamp = new THREE.Mesh(geoCaixa, matLampada); lamp.scale.set(0.6, 0.15, 0.3); lamp.position.set(px, 6, pz); cena.add(lamp);
-    const luz = new THREE.PointLight(0xffd9a0, 30, 20, 1.4); luz.position.set(px, 5.6, pz); cena.add(luz);
+  // barris com fogo e caçambas (obstáculos pequenos)
+  const nFogo = zona.id === 'centro' || zona.id === 'base' ? 3 : zona.id === 'suburbio' ? 1 : 0;
+  tent = 0; let nF = 0;
+  while (nF < nFogo && tent++ < 200) {
+    const cx = rand(-28, 28), cz = rand(-28, 28);
+    if (!livre(cx, cz, 0.7, 0.7, 2)) continue;
+    const b = VIS.barrilFogo(); b.position.set(cx, 0, cz); cena.add(b);
+    addObst(cx, cz, 0.66, 0.66, 0.9, 'caixa');
+    fogos.push({ luz: b.userData.luz, x: cx, z: cz, larg: 0.25, y: 0.95 });
+    nF++;
+  }
+  tent = 0; let nCac = 0;
+  while (nCac < 3 && tent++ < 200) {
+    const cx = rand(-30, 30), cz = rand(-30, 30), giro = Math.random() < 0.5;
+    if (!livre(cx, cz, giro ? 1.2 : 2, giro ? 2 : 1.2, 2.2)) continue;
+    const c = VIS.cacamba(); c.position.set(cx, 0, cz); c.rotation.y = giro ? Math.PI / 2 : 0; cena.add(sombra(c));
+    addObst(cx, cz, giro ? 1.2 : 2, giro ? 2 : 1.2, 1.2, 'caixa');
+    nCac++;
+  }
+  // postes de luz (alguns quebrados)
+  for (const [px, pz] of [[-8, 8], [8, -8], [-26, -4], [26, 6], [-10, -24], [12, 24]]) {
+    const quebrado = Math.random() < (zona.id === 'ninho' ? 0.7 : 0.3);
+    const poste = VIS.poste(quebrado);
+    poste.position.set(px, 0, pz);
+    poste.rotation.y = rand(0, 6.28);
+    cena.add(sombra(poste));
+    if (!quebrado) {
+      const luz = new THREE.PointLight(0xffd9a0, 30, 20, 1.4);
+      poste.userData.lamp.getWorldPosition(luz.position); luz.position.y -= 0.3;
+      cena.add(luz);
+    }
     addObst(px, pz, 0.3, 0.3, 6, 'poste');
   }
+  // decoração sem colisão: cones, lixo, corpos, tumores, tambores químicos
+  function decorar(fabrica, n, raio = 31) {
+    for (let i = 0, t = 0; i < n && t < n * 20; t++) {
+      const x = rand(-raio, raio), z = rand(-raio, raio);
+      if (!livre(x, z, 0.8, 0.8, 0.4)) continue;
+      const o = fabrica(); o.position.set(x, 0, z); o.rotation.y = rand(0, 6.28); cena.add(o); i++;
+    }
+  }
+  const pouco = qual === 'baixo' ? 0.5 : 1;
+  decorar(VIS.cone, Math.round(10 * pouco));
+  decorar(VIS.sacoLixo, Math.round(14 * pouco));
+  decorar(VIS.cadaver, Math.round((zona.dif > 2 ? 10 : 6) * pouco));
+  if (zona.id === 'ninho') decorar(() => VIS.tumor('roxo'), Math.round(16 * pouco));
+  if (zona.id === 'lab') { decorar(VIS.tamborQuimico, Math.round(6 * pouco)); decorar(() => VIS.tumor('verde'), Math.round(5 * pouco)); }
+  if (zona.id === 'base') {
+    for (const lado of [-1, 1]) { const c = VIS.cercaArame(18); c.position.set(lado * 24, 0, 6); c.rotation.y = Math.PI / 2; cena.add(c); }
+  }
+
+  // chão desenhado com o mapa inteiro (ruas, calçadas, faixas, poças)
+  const tamChao = qual === 'baixo' ? 1024 : 2048;
+  const tc = VIS.texChaoMapa(obst, L, zona.id, tamChao);
+  reg(tc.map); reg(tc.roughnessMap);
+  const chao = new THREE.Mesh(new THREE.PlaneGeometry(L * 2, L * 2),
+    qual === 'baixo' ? new THREE.MeshLambertMaterial({ map: tc.map }) : new THREE.MeshStandardMaterial({ map: tc.map, roughnessMap: tc.roughnessMap, roughness: 1, metalness: 0.05 }));
+  chao.rotation.x = -Math.PI / 2;
+  chao.receiveShadow = alto;
+  cena.add(chao);
+
   // heliponto
   const heli = new THREE.Group();
   const disco = new THREE.Mesh(new THREE.CircleGeometry(4.2, 32), new THREE.MeshLambertMaterial({ color: 0x24282c }));
-  disco.rotation.x = -Math.PI / 2; disco.position.y = 0.02; heli.add(disco);
+  disco.rotation.x = -Math.PI / 2; disco.position.y = 0.02; disco.receiveShadow = alto; heli.add(disco);
   const anel = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.0, 40), new THREE.MeshBasicMaterial({ color: 0xffd020 }));
   anel.rotation.x = -Math.PI / 2; anel.position.y = 0.03; heli.add(anel);
   const matH = new THREE.MeshBasicMaterial({ color: 0xffffff });
   for (const [x, z, w, d] of [[-0.9, 0, 0.35, 2.6], [0.9, 0, 0.35, 2.6], [0, 0, 1.5, 0.35]]) {
     const b = new THREE.Mesh(new THREE.PlaneGeometry(w, d), matH); b.rotation.x = -Math.PI / 2; b.position.set(x, 0.04, z); heli.add(b);
+  }
+  // luzes de pouso piscando em volta
+  const luzesPouso = [];
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0x40ff80, toneMapped: false }));
+    l.position.set(Math.cos(a) * 4.3, 0.1, Math.sin(a) * 4.3);
+    heli.add(l); luzesPouso.push(l);
   }
   const feixe = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 40, 32, 1, true),
     new THREE.MeshBasicMaterial({ color: 0x40ff80, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -255,17 +433,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
   heli.position.set(CEL_HELI.x, 0, CEL_HELI.z);
   cena.add(heli);
 
-  // estrelas
-  {
-    const pos = [];
-    for (let i = 0; i < 500; i++) {
-      const a = Math.random() * Math.PI * 2, e = rand(0.12, 1.4), r = 150;
-      pos.push(Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    cena.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, fog: false, sizeAttenuation: true })));
-  }
+  // pós-processamento (brilho, cor, vinheta, grão)
+  const TINTS = { suburbio: 0xc8d8ff, centro: 0xffc8a0, lab: 0xc0ffd0, base: 0xe8e8c8, ninho: 0xe8c0ff };
+  const pos = VIS.criarPos(R, cena, camera, vmCena, vmCam, qual, mod.has('lua') ? 0xffb0a0 : TINTS[zona.id] || 0xffffff);
 
   // ---------- grid de navegação (flow field) ----------
   const bloq = new Uint8Array(N * N);
@@ -395,14 +565,16 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
 
   // ---------- jogador ----------
   const jog = {
-    x: INICIO.x, z: INICIO.z, yaw: 0, pitch: 0, hp: 100, hpMax: 100,
+    x: INICIO.x, z: INICIO.z, yaw: 0, pitch: 0, hp: 100 + 15 * nv('vida'), hpMax: 100 + 15 * nv('vida'),
+    torretas: loadout.torretas || 0, invul: 0, dash: 0, dashX: 0, dashZ: 0, cdEsq: 0, cdFaca: 0, faca: 0, semDano: 0,
     armadura: loadout.armadura, armaduraMax: loadout.armadura,
     granadas: loadout.granadas, kits: loadout.kits, curando: 0, passo: 0, morto: false,
     y: 0, vy: 0, noChao: true, pousou: 0,
   };
   const armas = loadout.armas.filter(Boolean).map(a => {
     const st = stats(a);
-    const mesh = criarArma(a);
+    st.recarga *= 1 - 0.08 * nv('recarga');
+    const mesh = criarArma(a, { maos: true });
     mesh.visible = false;
     vmCam.add(mesh);
     return { def: a, st, mesh, pente: st.pente, reserva: st.pente * 4, reservaMax: st.pente * 7 };
@@ -426,30 +598,53 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
 
   // ---------- zumbis ----------
   const zumbis = [];
-  function spawnZumbi(tipo) {
+  function spawnZumbi(tipo, pos, eliteForcado) {
     let x = 0, z = 0, ok = false;
+    if (pos) {
+      for (let t = 0; t < 12 && !ok; t++) {
+        x = clamp(pos.x + rand(-2.5, 2.5), -L + 9, L - 9); z = clamp(pos.z + rand(-2.5, 2.5), -L + 9, L - 9);
+        ok = !bloq[Math.floor(z + L) * N + Math.floor(x + L)];
+      }
+    }
     for (let t = 0; t < 60 && !ok; t++) {
       const lado = Math.floor(Math.random() * 4), p = rand(-31, 31), q = rand(27, 32.5);
       if (lado === 0) { x = p; z = -q; } else if (lado === 1) { x = p; z = q; } else if (lado === 2) { x = -q; z = p; } else { x = q; z = p; }
       const cx = Math.floor(x + L), cz = Math.floor(z + L);
       ok = !bloq[cz * N + cx] && Math.hypot(x - jog.x, z - jog.z) > (t < 40 ? 20 : 10);
     }
-    if (!ok) return;
+    if (!ok) return null;
     const def = ZUMBIS[tipo];
-    const g = criarZumbi(tipo);
+    const chanceElite = mod.has('elite') ? 0.2 : zona.dif >= 3 ? 0.05 : onda >= 3 ? 0.02 : 0;
+    const elite = !def.boss && (eliteForcado || Math.random() < chanceElite);
+    const g = criarZumbi(tipo, { elite });
     g.position.set(x, 0, z);
-    cena.add(g);
-    const escalaOnda = 1 + 0.1 * (onda - 1);
-    const hp = def.hp * escalaOnda * (0.7 + 0.3 * zona.dif) * (tipo === 'chefe' ? zona.dif : 1);
-    zumbis.push({
-      tipo, def, g, x, z, hp, hpMax: hp, vivo: true, morte: 0,
-      vel: def.vel * Math.min(1.35, 1 + 0.025 * onda) * rand(0.9, 1.1),
-      dano: def.dano * (0.8 + 0.2 * zona.dif),
-      raio: def.raio, escala: g.scale.x,
+    cena.add(sombra(g, false));
+    const escalaOnda = 1 + 0.1 * (Math.min(onda, 30) - 1) + (sobrevivencia ? 0.04 * Math.max(0, onda - 10) : 0);
+    const forca = 0.7 + 0.3 * zona.dif;
+    let hp = def.hp * escalaOnda * forca * (def.boss ? 0.6 + 0.4 * zona.dif : 1) * (mod.has('lua') ? 1.6 : 1) * (elite ? 3 : 1);
+    const rast = tipo === 'rastejante';
+    const zb = {
+      tipo, def, g, x, z, hp, hpMax: hp, vivo: true, morte: 0, elite,
+      vel: def.vel * Math.min(1.35, 1 + 0.025 * onda) * rand(0.9, 1.1) * (mod.has('frenesi') ? 1.3 : 1),
+      dano: def.dano * (0.8 + 0.2 * zona.dif) * (mod.has('frenesi') ? 1.25 : 1) * (elite ? 1.3 : 1),
+      raio: def.raio * (elite ? 1.15 : 1), escala: g.scale.x,
       ataque: 0, cdAtaque: 0, cdCuspe: rand(1, 3), fogo: 0, fogoDps: 0, flash: 0,
       gemido: rand(1, 6), fase: Math.random() * 10, yaw: 0,
-    });
-    if (tipo === 'chefe') { som.rugido(); anunciar('A ABOMINAÇÃO CHEGOU!', '#ff3050'); tremor = 0.6; }
+      // hitbox: altura da cabeça, deslocamento para a frente e altura do corpo (em escala 1)
+      cabY: rast ? 0.5 : 1.58, cabFrente: rast ? 0.75 : 0, corpoAlt: rast ? 0.6 : 1.42,
+      armadura: (def.armadura || 0) * forca * (elite ? 2 : 1), capacete: (def.capacete || 0) * forca,
+      escudo: (def.escudo || 0) * forca, buff: 0, revelado: 0, cdGrito: rand(3, 5), cdGas: rand(1, 3),
+      ia: 'normal', iaT: 0, cdEsp: rand(3, 5), dir: { x: 0, z: 0 }, fase2: false, invocou: 0, tonto: 0,
+    };
+    if (mod.has('blindagem') && !zb.armadura && !def.boss) zb.armadura = 90 * forca;
+    zb.armaduraMax = zb.armadura;
+    zumbis.push(zb);
+    if (def.boss) {
+      som.rugido(); tremor = 0.6;
+      anunciar(`${def.nome.toUpperCase()} CHEGOU!`, '#ff3050', 3);
+      feed(`Dica: ${def.dica}`, '#ffb070');
+    }
+    return zb;
   }
 
   // ---------- projéteis (cuspe e granada) ----------
@@ -499,26 +694,31 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
 
   // ---------- estado da raid ----------
   let onda = 0, estado = 'preparo', timerEstado = 5, filaSpawn = [], timerSpawn = 0, chefeAgendado = false;
-  let ganho = 0, abates = 0, extracao = 0, tempo = 0, timerFluxo = 0, timerTrickle = 0;
+  let ganho = 0, abates = 0, extracao = 0, tempo = 0, timerFluxo = 0, timerTrickle = 0, janela = 0;
   const armasAchadas = [];
   let pausado = false, acabou = false, raf = 0;
 
   function montarOnda(n) {
-    const total = Math.round((6 + n * 4) * (0.8 + 0.2 * zona.dif));
-    const pesos = {
-      errante: 1,
-      corredor: n >= 2 ? 0.3 + 0.05 * n : 0,
-      cuspidor: n >= 3 ? 0.2 : 0,
-      inchado: n >= 3 ? 0.18 : 0,
-      bruto: n >= (zona.dif > 2 ? 3 : 4) ? 0.07 + 0.01 * n : 0,
-    };
+    const total = Math.round((6 + Math.min(n, 25) * 4) * (0.8 + 0.2 * zona.dif));
+    const pesos = {};
+    for (const [tipo, [min, base, extra]] of Object.entries(zona.pool)) {
+      if (n >= min) pesos[tipo] = base + extra * (n - min);
+    }
     const soma = Object.values(pesos).reduce((a, b) => a + b, 0);
     const f = [];
     for (let i = 0; i < total; i++) {
       let r = Math.random() * soma;
       for (const k in pesos) { r -= pesos[k]; if (r <= 0) { f.push(k); break; } }
     }
-    if (n === zona.ondas) f.splice(Math.floor(f.length * 0.35), 0, 'chefe');
+    // chefes: na última onda da raid, ou a cada 5 ondas na Sobrevivência
+    let chefes = [];
+    if (!sobrevivencia && n === zona.ondas) chefes = zona.chefes;
+    if (sobrevivencia && n % 5 === 0) {
+      const lista = ['acougueiro', 'chefe', 'colosso', 'rainha'];
+      chefes = [lista[(n / 5 - 1) % lista.length]];
+      if (n >= 20) chefes.push(lista[(n / 5) % lista.length]);
+    }
+    chefes.forEach((c, i) => f.splice(Math.floor(f.length * (0.3 + 0.3 * i)), 0, c));
     return f;
   }
 
@@ -529,6 +729,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     rec: $('hudRec'), recFill: $('hudRecFill'), itens: $('hudItens'), anuncio: $('anuncio'), feed: $('feed'),
     mira: $('mira'), hit: $('hitmarker'), dano: $('vinheta'), mapa: $('minimapa'), luneta: $('luneta'),
     ext: $('hudExt'), extFill: $('hudExtFill'), danoNums: $('danoNums'), bossBar: $('bossBar'), bossFill: $('bossFill'),
+    bossNome: $('bossNome'), bossArm: $('bossArm'),
   };
   hud.mapa.width = hud.mapa.height = 150;
   const mctx = hud.mapa.getContext('2d');
@@ -567,10 +768,11 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     hud.mun.classList.toggle('pouca', a.pente <= Math.ceil(a.st.pente * 0.25));
   }
   function atualizarHudItens() {
-    hud.itens.innerHTML = `💣 ${jog.granadas} &nbsp; ✚ ${jog.kits}`;
-    const bg = $('btnGranada'), bk = $('btnKit');
+    hud.itens.innerHTML = `💣 ${jog.granadas} &nbsp; ✚ ${jog.kits} &nbsp; ⚙ ${jog.torretas}`;
+    const bg = $('btnGranada'), bk = $('btnKit'), bt = $('btnTorreta');
     if (bg) bg.querySelector('span').textContent = jog.granadas;
     if (bk) bk.querySelector('span').textContent = jog.kits;
+    if (bt) bt.querySelector('span').textContent = jog.torretas;
   }
   function atualizarHudVida() {
     hud.hp.style.width = (jog.hp / jog.hpMax * 100) + '%';
@@ -589,44 +791,113 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     numsPool.push({ el: s, vida: 0, x: 0, y: 0, z: 0 });
   }
   let numIdx = 0;
-  function numeroDano(x, y, z, v, cabeca, cor) {
+  function numeroDano(x, y, z, v, cabeca, cor, texto) {
     const n = numsPool[numIdx]; numIdx = (numIdx + 1) % numsPool.length;
     n.x = x + rand(-0.2, 0.2); n.y = y; n.z = z + rand(-0.2, 0.2); n.vida = 0.8;
-    n.el.textContent = Math.round(v);
+    n.el.textContent = texto && !v ? texto : (texto || '') + Math.round(v);
     n.el.style.color = cor || (cabeca ? '#ffd020' : '#fff');
     n.el.style.fontSize = cabeca ? '20px' : '15px';
   }
 
   // ---------- combate ----------
-  function danoZumbi(z, valor, cabeca, px, py, pz, origem) {
-    if (!z.vivo) return;
-    z.hp -= valor;
-    z.flash = 0.08;
-    if (origem !== 'fogo') numeroDano(px, py, pz, valor, cabeca, origem === 'explosao' ? '#ff9a40' : null);
-    if (z.hp <= 0) matar(z, cabeca);
+  const placar = { porTipo: {}, headshots: 0, facao: 0, elite: 0, chefes: [], xp: 0 };
+
+  // Defesas dos zumbis. dir = direção do golpe (do jogador para o zumbi). Retorna o dano que chega na vida.
+  function defesa(z, dano, cabeca, origem, dir, perfura = 0) {
+    if (origem === 'fogo') return dano; // fogo passa por tudo
+    const fz = { x: -Math.sin(z.yaw), z: -Math.cos(z.yaw) };       // para onde o zumbi olha
+    const frente = dir ? dir.x * fz.x + dir.z * fz.z : 0;          // < 0: golpe de frente; > 0: pelas costas
+    const ud = z.g.userData;
+    // escudo antimotim: bloqueia balas de frente no corpo
+    if (z.escudo > 0 && origem === 'bala' && !cabeca && frente < -0.35) {
+      z.escudo -= dano * (1 + 0.5 * perfura);
+      som.escudo();
+      if (z.escudo <= 0) { if (ud.escudo) ud.escudo.visible = false; som.quebra(); feed('Escudo destruído!', '#9cf'); }
+      return -1; // bloqueado
+    }
+    if (z.escudo > 0 && origem === 'explosao') { z.escudo -= dano * 1.5; if (z.escudo <= 0 && ud.escudo) { ud.escudo.visible = false; som.quebra(); } }
+    // Colosso: núcleo nas costas
+    if (z.tipo === 'colosso' && dir && frente > 0.3 && origem !== 'explosao') return dano * 2.5;
+    // capacete
+    if (cabeca && z.capacete > 0 && origem !== 'explosao') {
+      z.capacete -= dano * (1 + 0.5 * perfura);
+      som.armadura();
+      if (z.capacete <= 0) { if (ud.capacete) ud.capacete.visible = false; som.quebra(); }
+      return dano * 0.3;
+    }
+    // colete / blindagem
+    if (z.armadura > 0 && !(cabeca && origem === 'bala' && z.tipo !== 'colosso')) {
+      const mult = origem === 'explosao' ? 1.6 : origem === 'faca' ? 0.6 : 1 + 0.5 * perfura;
+      z.armadura -= dano * mult;
+      if (origem === 'bala') som.armadura();
+      if (z.armadura <= 0) {
+        if (ud.placas) ud.placas.visible = false;
+        som.quebra(); feed(`Armadura do ${z.def.nome} quebrou!`, '#9cf');
+      }
+      return dano * (origem === 'explosao' ? 0.5 : z.def.boss ? 0.15 : 0.2);
+    }
+    return dano;
   }
-  function matar(z, cabeca) {
+
+  function danoZumbi(z, valor, cabeca, px, py, pz, origem, dir, perfura) {
+    if (!z.vivo) return 0;
+    let v = defesa(z, valor, cabeca, origem, dir, perfura);
+    if (v < 0) { numeroDano(px, py, pz, 0, false, '#7ab0ff', 'BLOQ'); return -1; }
+    if (z.tonto > 0) v *= 1.6;
+    z.hp -= v;
+    z.flash = 0.08;
+    if (z.tipo === 'espectro') z.revelado = 2.5;
+    if (origem !== 'fogo') {
+      const fraco = z.tipo === 'colosso' && v >= valor * 2;
+      const cor = origem === 'explosao' ? '#ff9a40' : fraco ? '#ff4040' : v < valor * 0.5 ? '#9aa8b8' : null;
+      numeroDano(px, py, pz, v, cabeca, cor, fraco ? 'CRÍTICO ' : '');
+    }
+    if (z.hp <= 0) matar(z, cabeca, origem);
+    return v;
+  }
+
+  function matar(z, cabeca, origem) {
+    if (!z.vivo) return;
     z.vivo = false; z.morte = 0;
+    z.queda = Math.random() < 0.5 ? -1 : 1; z.giroQueda = rand(-0.5, 0.5);
+    marcas.sangue(z.x, z.z, 1.2 * z.escala);
+    if (cabeca && !z.def.boss && origem === 'bala' && z.g.userData.cabeca) {
+      z.g.userData.cabeca.visible = false;
+      const hy = z.cabY * z.escala;
+      sangue(z.x, hy, z.z, 26);
+      for (let i = 0; i < 6; i++) particula(z.x, hy, z.z, rand(-3, 3), rand(1, 5), rand(-3, 3), rand(0.6, 1.2), rand(0.06, 0.1), 0x8a7a6a);
+    }
     abates++;
-    const g = Math.round(z.def.grana * zona.recompensa * (cabeca ? 1.5 : 1));
+    placar.porTipo[z.tipo] = (placar.porTipo[z.tipo] || 0) + 1;
+    if (origem === 'faca') placar.facao++;
+    if (z.elite) placar.elite++;
+    placar.xp += Math.round((z.def.grana * 1.5 + 5) * (z.elite ? 3 : 1));
+    const g = Math.round(z.def.grana * recompensa * (cabeca ? 1.5 : 1) * (z.elite ? 3 : 1));
     ganho += g;
     som.abate();
-    feed(`${z.def.nome} eliminado${cabeca ? ' (headshot)' : ''}  +${fmt(g)}`, cabeca ? '#ffd020' : '#cfe');
-    sangue(z.x, 1.2 * z.escala, z.z, 14);
+    feed(`${z.elite ? 'ELITE ' : ''}${z.def.nome} eliminado${cabeca ? ' (headshot)' : origem === 'faca' ? ' (facão)' : ''}  +${fmt(g)}`, z.elite ? '#ffd040' : cabeca ? '#ffd020' : '#cfe');
+    sangue(z.x, 1.2 * z.escala, z.z, 14, z.tipo === 'toxico' || z.tipo === 'cuspidor' ? 0x6aaa20 : 0x8a0a0a);
     if (z.tipo === 'inchado') explodir(z.x, 1, z.z, 4.5, z.dano * 1.4, 'zumbi');
+    if (z.tipo === 'toxico') criarNuvem(z.x, z.z, 3.5, 12, 8);
     // drops
+    const sorte = 1 + 0.15 * nv('sorte');
     const r = Math.random();
-    if (z.tipo === 'chefe') {
-      const a = novaArma(null, rolarTier(BOSS_PESOS));
-      soltarLoot('arma', z.x, z.z, a);
-      for (let i = 0; i < 4; i++) soltarLoot('grana', z.x + rand(-2, 2), z.z + rand(-2, 2), 80 * zona.recompensa);
-      $('bossBar').style.display = 'none';
-      anunciar('ABOMINAÇÃO DERROTADA!', '#ffd020');
-    } else if (r < (z.tipo === 'bruto' ? 0.25 : 0.035)) {
+    if (z.def.boss) {
+      placar.chefes.push(z.tipo);
+      const t = rolarTier(BOSS_PESOS);
+      soltarLoot('arma', z.x, z.z, novaArma(null, Math.min(5, t + (zona.dif >= 3 ? 1 : 0))));
+      for (let i = 0; i < 5; i++) soltarLoot('grana', z.x + rand(-2, 2), z.z + rand(-2, 2), Math.round(80 * recompensa));
+      soltarLoot('municao', z.x + 1, z.z); soltarLoot('vida', z.x - 1, z.z);
+      if (!zumbis.some(o => o.vivo && o.def.boss)) hud.bossBar.style.display = 'none';
+      anunciar(`${z.def.nome.toUpperCase()} DERROTADO!`, '#ffd020');
+      som.raro();
+    } else if (z.elite) {
+      soltarLoot('arma', z.x, z.z, novaArma(null, Math.min(5, rolarTier(zona.loot) + 1)));
+    } else if (r < (z.tipo === 'bruto' ? 0.25 : ['blindado', 'escudeiro', 'gritador', 'espectro', 'toxico'].includes(z.tipo) ? 0.08 : 0.035) * sorte) {
       soltarLoot('arma', z.x, z.z, novaArma(null, rolarTier(zona.loot)));
     } else if (r < 0.14) soltarLoot('municao', z.x, z.z);
     else if (r < 0.2) soltarLoot('vida', z.x, z.z);
-    else if (r < 0.32) soltarLoot('grana', z.x, z.z, Math.round(rand(15, 40) * zona.recompensa));
+    else if (r < 0.32) soltarLoot('grana', z.x, z.z, Math.round(rand(15, 40) * recompensa));
   }
 
   function explodir(x, y, z, raio, dano, origem) {
@@ -640,7 +911,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       const d = Math.hypot(zb.x - x, zb.z - z);
       if (d < raio + zb.raio) danoZumbi(zb, dano * (1 - 0.6 * d / (raio + zb.raio)) * (origem === 'zumbi' ? 0.5 : 1), false, zb.x, 1.4 * zb.escala, zb.z, 'explosao');
     }
-    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' ? 0.5 : 1));
+    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' ? 0.5 : 1), false, { x, z });
     for (const b of barris) {
       if (b.hp > 0 && Math.hypot((b.minx + b.maxx) / 2 - x, (b.minz + b.maxz) / 2 - z) < raio) {
         b.hp = 0;
@@ -658,18 +929,38 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     explodir(cx, 0.8, cz, 5.5, 220, 'barril');
   }
 
-  function danoJogador(v) {
+  const dirEls = [];
+  $('dirDano').innerHTML = '';
+  for (let i = 0; i < 4; i++) { const e = document.createElement('i'); $('dirDano').appendChild(e); dirEls.push(e); }
+  let iDir = 0;
+  function mostrarDirecao(x, z) {
+    const dx = x - jog.x, dz = z - jog.z;
+    const f = -dx * Math.sin(jog.yaw) - dz * Math.cos(jog.yaw);
+    const r = dx * Math.cos(jog.yaw) - dz * Math.sin(jog.yaw);
+    const e = dirEls[iDir]; iDir = (iDir + 1) % dirEls.length;
+    e.style.transform = `rotate(${Math.atan2(r, f)}rad)`;
+    e.classList.add('on');
+    requestAnimationFrame(() => requestAnimationFrame(() => e.classList.remove('on')));
+  }
+  function danoJogador(v, silencioso, fonte) {
     if (jog.morto || acabou) return;
+    if (fonte && !silencioso && jog.invul <= 0) mostrarDirecao(fonte.x, fonte.z);
+    if (jog.invul > 0) { if (!silencioso) numeroDano(jog.x + Math.sin(jog.yaw) * -2, jog.y + 1.8, jog.z - Math.cos(jog.yaw) * 2, 0, false, '#9cf', 'ESQUIVOU'); return; }
+    v *= 1 - 0.05 * nv('resistencia');
     if (jog.armadura > 0) {
       const absorve = Math.min(jog.armadura, v * 0.6);
       jog.armadura -= absorve; v -= absorve;
     }
     jog.hp -= v;
-    flashDano = Math.min(1, flashDano + 0.35 + v / 60);
-    tremor = Math.max(tremor, 0.15);
-    som.dano();
+    jog.semDano = 0;
+    flashDano = Math.min(1, flashDano + (silencioso ? 0.08 : 0.35) + v / 60);
+    if (!silencioso) { tremor = Math.max(tremor, 0.15); som.dano(); }
     if (jog.hp <= 0) { jog.hp = 0; morrer(); }
     atualizarHudVida();
+  }
+  function empurrarJogador(dx, dz, forca) {
+    const d = Math.hypot(dx, dz) || 1;
+    jog.dashX = dx / d * forca; jog.dashZ = dz / d * forca; jog.dash = 0.15;
   }
 
   const dirTiro = new THREE.Vector3(), origemTiro = new THREE.Vector3(), pontaW = new THREE.Vector3(), fimT = new THREE.Vector3();
@@ -697,6 +988,10 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     chute = 1;
     flashT = 0.05;
     luzTiro.intensity = 14;
+    vmLuzTiro.intensity = 4;
+    ultimoTiro = tempo;
+    marcas.fumaca(pontaW.x, pontaW.y, pontaW.z, a.def.tipo === 'escopeta' || a.def.tipo === 'sniper' ? 0.7 : 0.35);
+    if (a.def.tipo === 'escopeta') setTimeout(() => !acabou && ejetarCapsula(true), 280); else ejetarCapsula(false);
     som.tiro(a.def.tipo, a.def.tier >= 5);
     atualizarHudArma();
     if (a.pente === 0 && a.reserva > 0) setTimeout(() => { if (!acabou) recarregar(); }, 200);
@@ -715,23 +1010,27 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     for (const z of zumbis) {
       if (!z.vivo) continue;
       const s = z.escala;
-      const hx = z.x, hy = 1.58 * s, hz = z.z;
+      const hx = z.x - Math.sin(z.yaw) * z.cabFrente * s, hy = z.cabY * s, hz = z.z - Math.cos(z.yaw) * z.cabFrente * s;
       const tc = raioEsfera(o.x, o.y, o.z, d.x, d.y, d.z, hx, hy, hz, 0.2 * s);
       if (tc >= 0 && tc < tObst) { hits.push({ z, t: tc, cabeca: true }); continue; }
       const w = z.raio * 0.85;
-      const tb = raioCaixa(o.x, o.y, o.z, d.x, d.y, d.z, z.x - w, 0, z.z - w, z.x + w, 1.42 * s, z.z + w, tObst);
+      const tb = raioCaixa(o.x, o.y, o.z, d.x, d.y, d.z, z.x - w, 0, z.z - w, z.x + w, z.corpoAlt * s, z.z + w, tObst);
       if (tb >= 0) hits.push({ z, t: tb, cabeca: false });
     }
     hits.sort((p, q) => p.t - q.t);
     let tFim = tObst;
     const maxHits = 1 + st.perfura;
+    let bloqueou = false;
     for (let i = 0; i < hits.length && i < maxHits; i++) {
       const h = hits[i], z = h.z;
       const px = o.x + d.x * h.t, py = o.y + d.y * h.t, pz = o.z + d.z * h.t;
-      let dano = st.dano * (h.t > st.alcance ? 0.55 : 1) * (h.cabeca ? (a.def.tipo === 'sniper' ? 2.5 : 2) : 1) * (i > 0 ? 0.7 : 1);
-      if (z.tipo === 'chefe' && h.cabeca) dano *= 0.75;
-      danoZumbi(z, dano, h.cabeca, px, py, pz, 'bala');
-      sangue(px, py, pz, h.cabeca ? 8 : 4, z.tipo === 'cuspidor' ? 0x6aaa20 : 0x8a0a0a);
+      const multCab = (a.def.tipo === 'sniper' ? 2.5 : 2) * (1 + 0.12 * nv('critico'));
+      let dano = st.dano * (h.t > st.alcance ? 0.55 : 1) * (h.cabeca ? multCab : 1) * (i > 0 ? 0.7 : 1);
+      if (z.def.boss && h.cabeca) dano *= 0.75;
+      const res = danoZumbi(z, dano, h.cabeca, px, py, pz, 'bala', d, st.perfura);
+      if (res < 0) { faiscas(px, py, pz); tFim = h.t; bloqueou = true; break; } // bateu no escudo
+      if (h.cabeca) placar.headshots++;
+      sangue(px, py, pz, h.cabeca ? 8 : 4, z.tipo === 'cuspidor' || z.tipo === 'toxico' ? 0x6aaa20 : 0x8a0a0a);
       hitmarker = 0.12; hitCabeca = h.cabeca;
       som.hit(h.cabeca);
       if (st.fogo) { z.fogo = 3; z.fogoDps = st.dano * 0.18 * st.projeteis; }
@@ -739,10 +1038,21 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       if (st.explosivo && principal) explodir(px, py, pz, 2.6, st.dano * 0.45 * Math.max(1, st.projeteis / 3), 'bala');
       tFim = h.t;
     }
-    if (hits.length < maxHits) {
+    if (hits.length < maxHits && !bloqueou) {
       tFim = tObst;
       if (tFim < st.alcance * 1.6) {
-        faiscas(o.x + d.x * tFim, o.y + d.y * tFim, o.z + d.z * tFim);
+        const ix = o.x + d.x * tFim, iy = o.y + d.y * tFim, iz = o.z + d.z * tFim;
+        faiscas(ix, iy, iz);
+        if (principal || Math.random() < 0.3) {
+          if (!obstAtingido) marcas.furo(ix, 0.01, iz, 0, 1, 0);
+          else {
+            const b = obstAtingido;
+            const dd = [[Math.abs(ix - b.minx), -1, 0, 0], [Math.abs(ix - b.maxx), 1, 0, 0], [Math.abs(iz - b.minz), 0, 0, -1], [Math.abs(iz - b.maxz), 0, 0, 1], [Math.abs(iy - b.h), 0, 1, 0]];
+            dd.sort((p, q) => p[0] - q[0]);
+            marcas.furo(ix, iy, iz, dd[0][1], dd[0][2], dd[0][3]);
+          }
+          particula(ix, iy, iz, rand(-1, 1), rand(0.5, 1.5), rand(-1, 1), 0.5, 0.12, 0x5a5650, 2);
+        }
         if (obstAtingido && obstAtingido.tipo === 'barril' && !obstAtingido.estourado) {
           obstAtingido.hp -= st.dano;
           if (obstAtingido.hp <= 0) estourarBarril(obstAtingido);
@@ -766,7 +1076,8 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       const s = z.escala;
       const dx = z.x - ox, dz = z.z - oz, dist = Math.hypot(dx, dz);
       if (dist > st.alcance * 1.1 || dist < 0.3) continue;
-      const ty = (dist < 6 ? 1.2 : 1.45) * s; // peito de perto, mais alto de longe
+      if (z.tipo === 'espectro' && z.revelado <= 0 && dist > 5) continue;
+      const ty = z.tipo === 'rastejante' ? 0.45 : (dist < 6 ? 1.2 : 1.45) * s; // peito de perto, mais alto de longe
       const dy = ty - oy, d3 = Math.hypot(dx, dy, dz);
       const ang = Math.acos(clamp((dx * fwd.x + dy * fwd.y + dz * fwd.z) / d3, -1, 1));
       if (ang > 0.2 || (melhor && ang >= melhor.ang)) continue;
@@ -783,6 +1094,332 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       melhor = { z, ang, naMira: ang < raioAng, yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(dy, dist) };
     }
     return melhor;
+  }
+
+  // ---------- linha de visão ----------
+  function visivel(ax, ay, az, bx, by, bz) {
+    const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz) || 1;
+    for (const b of obst) {
+      const t = raioCaixa(ax, ay, az, dx / d, dy / d, dz / d, b.minx, 0, b.minz, b.maxx, b.h, b.maxz, d);
+      if (t >= 0 && t < d - 0.5) return false;
+    }
+    return true;
+  }
+
+  // ---------- facão ----------
+  const facaMesh = criarFacao();
+  facaMesh.visible = false;
+  vmCam.add(facaMesh);
+  function facada() {
+    if (jog.cdFaca > 0 || jog.morto || pausado) return;
+    jog.cdFaca = 0.55; jog.faca = 0.32;
+    som.faca();
+    setTimeout(() => { if (!acabou) acertarFaca(); }, 110);
+  }
+  function acertarFaca() {
+    const fx = -Math.sin(jog.yaw), fz = -Math.cos(jog.yaw);
+    let acertou = false;
+    for (const z of zumbis) {
+      if (!z.vivo) continue;
+      const dx = z.x - jog.x, dz = z.z - jog.z, d = Math.hypot(dx, dz) || 0.01;
+      if (d > 2.1 + z.raio || (d > 0.4 && (dx * fx + dz * fz) / d < 0.45)) continue;
+      const dano = 95 * (1 + 0.4 * nv('facao')) * (1 + 0.04 * Math.min(onda, 20));
+      danoZumbi(z, dano, false, z.x, 1.3 * z.escala, z.z, 'faca', { x: dx / d, z: dz / d });
+      sangue(z.x, 1.1 * z.escala, z.z, 10);
+      if (z.vivo && !z.def.boss) { z.x += dx / d * 1.2; z.z += dz / d * 1.2; colidir(z, z.raio); z.ataque = 0; z.cdAtaque = 0.9; }
+      acertou = true;
+    }
+    if (acertou) { som.facaHit(); hitmarker = 0.12; hitCabeca = false; tremor = Math.max(tremor, 0.08); }
+  }
+
+  // ---------- esquiva ----------
+  function esquivar() {
+    if (jog.cdEsq > 0 || jog.morto || pausado) return;
+    let dx = mov.x, dz = mov.z;
+    if (Math.hypot(dx, dz) < 0.1) { dx = -Math.sin(jog.yaw); dz = -Math.cos(jog.yaw); }
+    const d = Math.hypot(dx, dz);
+    jog.dashX = dx / d * 22; jog.dashZ = dz / d * 22; jog.dash = 0.17; jog.invul = 0.4;
+    jog.cdEsq = 2.6 * (1 - 0.15 * nv('esquiva'));
+    som.esquiva();
+  }
+
+  // ---------- torreta ----------
+  const torretas = [];
+  const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+  function colocarTorreta() {
+    if (jog.torretas <= 0 || jog.morto || pausado) return;
+    const p = { x: jog.x - Math.sin(jog.yaw) * 2.4 + Math.cos(jog.yaw) * 1.2, z: jog.z - Math.cos(jog.yaw) * 2.4 - Math.sin(jog.yaw) * 1.2 };
+    colidir(p, 0.5);
+    const m = criarTorreta();
+    m.position.set(p.x, 0, p.z);
+    cena.add(m);
+    jog.torretas--;
+    torretas.push({ x: p.x, z: p.z, m, t: 30, cd: 0, alvo: null, busca: 0 });
+    som.recarga();
+    feed('Torreta posicionada (30s)', '#7f7');
+    atualizarHudItens();
+  }
+  function atualizarTorretas(dt) {
+    for (let i = torretas.length - 1; i >= 0; i--) {
+      const t = torretas[i];
+      t.t -= dt; t.cd -= dt; t.busca -= dt;
+      if (t.t <= 0) { cena.remove(t.m); torretas.splice(i, 1); feed('Torreta desligou', '#aaa'); continue; }
+      if (t.busca <= 0) {
+        t.busca = 0.25; t.alvo = null;
+        let melhor = 22;
+        for (const z of zumbis) {
+          if (!z.vivo || (z.tipo === 'espectro' && z.revelado <= 0)) continue;
+          const d = Math.hypot(z.x - t.x, z.z - t.z);
+          if (d < melhor && visivel(t.x, 1.0, t.z, z.x, 1.0 * z.escala, z.z)) { melhor = d; t.alvo = z; }
+        }
+      }
+      const z = t.alvo;
+      if (z && z.vivo) {
+        t.m.userData.topo.rotation.y = Math.atan2(-(z.x - t.x), -(z.z - t.z));
+        if (t.cd <= 0) {
+          t.cd = 0.18;
+          const dd = Math.hypot(z.x - t.x, z.z - t.z) || 1;
+          const yAlvo = (z.tipo === 'rastejante' ? 0.4 : 1.1) * z.escala;
+          danoZumbi(z, 26 * (1 + 0.05 * Math.min(onda, 20)), false, z.x, yAlvo + 0.3, z.z, 'bala', { x: (z.x - t.x) / dd, z: (z.z - t.z) / dd }, 1);
+          tracante(tmpA.set(t.x, 1.0, t.z), tmpB.set(z.x, yAlvo, z.z), 0x80ffa0);
+          som.torreta();
+        }
+      }
+      if (t.t < 5) t.m.visible = Math.sin(tempo * 12) > -0.3; // pisca quando vai acabar
+    }
+  }
+
+  // ---------- gás tóxico ----------
+  const nuvens = [];
+  const matNuvem = new THREE.MeshBasicMaterial({ color: 0x8cff40, transparent: true, opacity: 0.22, depthWrite: false });
+  function criarNuvem(x, z, r, dps, dur) {
+    const m = new THREE.Mesh(geoEsf, matNuvem.clone());
+    m.scale.set(r, r * 0.35, r); m.position.set(x, 0.3, z);
+    cena.add(m);
+    nuvens.push({ x, z, r, dps, t: dur, m, tick: 0 });
+  }
+  function atualizarNuvens(dt) {
+    for (let i = nuvens.length - 1; i >= 0; i--) {
+      const n = nuvens[i];
+      n.t -= dt;
+      n.m.material.opacity = 0.22 * Math.min(1, n.t / 1.5);
+      if (Math.random() < dt * 6) particula(n.x + rand(-n.r, n.r) * 0.7, 0.3, n.z + rand(-n.r, n.r) * 0.7, 0, rand(0.3, 0.8), 0, 1, 0.14, 0x7adf30, -0.5);
+      if (Math.hypot(jog.x - n.x, jog.z - n.z) < n.r && jog.y < 1.6) {
+        n.tick -= dt;
+        if (n.tick <= 0) { n.tick = 0.5; danoJogador(n.dps * 0.5 * (0.8 + 0.2 * zona.dif), true); }
+      }
+      if (n.t <= 0) { cena.remove(n.m); n.m.material.dispose(); nuvens.splice(i, 1); }
+    }
+  }
+
+  // ---------- ondas de choque (Colosso) ----------
+  const choques = [];
+  const geoChoque = new THREE.CylinderGeometry(1, 1, 0.6, 48, 1, true);
+  function ondaDeChoque(x, z, dano) {
+    const m = new THREE.Mesh(geoChoque, new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.position.set(x, 0.3, z);
+    cena.add(m);
+    choques.push({ x, z, r: 0.5, m, dano, atingiu: false });
+    som.pisao();
+    tremor = Math.max(tremor, 0.5);
+  }
+  function atualizarChoques(dt) {
+    for (let i = choques.length - 1; i >= 0; i--) {
+      const c = choques[i];
+      c.r += 12 * dt;
+      c.m.scale.set(c.r, 1, c.r);
+      c.m.material.opacity = 0.8 * Math.max(0, 1 - c.r / 18);
+      const dj = Math.hypot(jog.x - c.x, jog.z - c.z);
+      if (!c.atingiu && Math.abs(dj - c.r) < 0.8 && jog.y < 0.45) {
+        c.atingiu = true;
+        danoJogador(c.dano, false, c);
+        empurrarJogador(jog.x - c.x, jog.z - c.z, 14);
+      }
+      if (c.r > 18) { cena.remove(c.m); c.m.material.dispose(); choques.splice(i, 1); }
+    }
+  }
+
+  // ---------- projéteis dos chefes ----------
+  const matPedra = new THREE.MeshLambertMaterial({ color: 0x5a5048 });
+  const matAcido = new THREE.MeshBasicMaterial({ color: 0xd040ff });
+  function lancarProjetil(x, y, z, alvoX, alvoZ, vel, dano, tipo, espalhar = 0) {
+    const dx = alvoX - x, dz = alvoZ - z, dist = Math.hypot(dx, dz) || 1;
+    const ang = Math.atan2(dx, dz) + espalhar;
+    const tVoo = Math.max(0.3, dist / vel);
+    const m = new THREE.Mesh(geoEsf, tipo === 'pedra' ? matPedra : matAcido);
+    m.scale.setScalar(tipo === 'pedra' ? 0.45 : 0.2);
+    const p = { tipo, m, x, y, z, vx: Math.sin(ang) * vel, vz: Math.cos(ang) * vel, vy: (1.2 - y) / tVoo + 0.5 * 9 * tVoo, t: 4, dano };
+    m.position.set(x, y, z);
+    cena.add(m);
+    projeteis.push(p);
+    som.cuspe();
+  }
+
+  // ---------- suprimento aéreo ----------
+  const suprimentos = [];
+  let proxSuprimento = 0;
+  function lancarSuprimento() {
+    let x = 0, z = 0;
+    for (let t = 0; t < 50; t++) {
+      x = rand(-26, 26); z = rand(-26, 26);
+      const d = Math.hypot(x - jog.x, z - jog.z);
+      if (!bloq[Math.floor(z + L) * N + Math.floor(x + L)] && d > 8 && d < 28) break;
+    }
+    const g = new THREE.Group();
+    const cx = new THREE.Mesh(geoCaixa, new THREE.MeshLambertMaterial({ color: 0x3a5a2a, emissive: 0x102008 }));
+    cx.scale.set(1.2, 0.9, 1.2); g.add(cx);
+    const para = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xe0e0e0, side: THREE.DoubleSide }));
+    para.position.y = 3; g.add(para);
+    const luz = new THREE.PointLight(0xff3020, 25, 12, 1.4); luz.position.y = 1; g.add(luz);
+    g.position.set(x, 35, z);
+    cena.add(g);
+    suprimentos.push({ g, x, z, y: 35 });
+    anunciar('SUPRIMENTO AÉREO! Siga o sinal vermelho', '#ff8040', 3);
+    som.aviao();
+  }
+  function atualizarSuprimentos(dt) {
+    if (proxSuprimento > 0) { proxSuprimento -= dt; if (proxSuprimento <= 0) lancarSuprimento(); }
+    for (let i = suprimentos.length - 1; i >= 0; i--) {
+      const sp = suprimentos[i];
+      sp.y -= 5 * dt;
+      sp.g.position.y = Math.max(0.45, sp.y);
+      if (Math.random() < dt * 20) particula(sp.x + rand(-0.3, 0.3), sp.g.position.y + 0.5, sp.z + rand(-0.3, 0.3), rand(-0.3, 0.3), rand(1, 2), rand(-0.3, 0.3), 1.2, 0.15, 0xff4030, -0.8);
+      if (sp.y <= 0.45) {
+        cena.remove(sp.g);
+        soltarLoot('arma', sp.x, sp.z, novaArma(null, Math.min(5, rolarTier(zona.loot) + 1)));
+        soltarLoot('municao', sp.x + 1.2, sp.z);
+        soltarLoot('vida', sp.x - 1.2, sp.z);
+        suprimentos.splice(i, 1);
+      }
+    }
+  }
+
+  // ---------- inteligência dos chefes ----------
+  // Retorna {mx, mz} quando controla o movimento, ou null para seguir o caminho normal.
+  function iaChefe(z, dt, dx, dz, dist) {
+    z.cdEsp -= dt; z.iaT -= dt;
+    const vida = z.hp / z.hpMax;
+    const d = dist || 1;
+    if (z.tonto > 0) { z.tonto -= dt; return { mx: 0, mz: 0 }; }
+    if (z.tipo === 'acougueiro') {
+      if (z.ia === 'prep') {
+        if (z.iaT > 0.3) { z.dir.x = dx / d; z.dir.z = dz / d; }
+        if (z.iaT <= 0) { z.ia = 'carga'; z.iaT = 1.3; z.acertou = false; }
+        return { mx: 0, mz: 0 };
+      }
+      if (z.ia === 'carga') {
+        const ax = z.x, az = z.z, passo = 15 * dt;
+        z.x += z.dir.x * passo; z.z += z.dir.z * passo;
+        colidir(z, z.raio);
+        const andou = Math.hypot(z.x - ax, z.z - az);
+        if (!z.acertou && Math.hypot(jog.x - z.x, jog.z - z.z) < z.raio + 1.0) {
+          z.acertou = true;
+          danoJogador(z.dano * 1.3, false, z);
+          empurrarJogador(z.dir.x, z.dir.z, 16);
+          z.ia = 'normal'; z.cdEsp = rand(4, 6) * (vida < 0.4 ? 0.6 : 1);
+          return { mx: 0, mz: 0 };
+        }
+        if (andou < passo * 0.3) {
+          z.ia = 'normal'; z.tonto = 2.2; z.cdEsp = rand(4, 6);
+          som.pisao(); tremor = Math.max(tremor, 0.3);
+          anunciar('ATORDOADO! Ataque agora!', '#ffd020', 1.5);
+        } else if (z.iaT <= 0) { z.ia = 'normal'; z.cdEsp = rand(4, 6) * (vida < 0.4 ? 0.6 : 1); }
+        return { mx: 0, mz: 0 };
+      }
+      if (z.cdEsp <= 0 && dist > 4 && dist < 26 && visivel(z.x, 1.5, z.z, jog.x, jog.y + 1, jog.z)) {
+        z.ia = 'prep'; z.iaT = 0.9;
+        som.investida();
+        anunciar('INVESTIDA! Saia da frente!', '#ff6040', 1.2);
+        return { mx: 0, mz: 0 };
+      }
+      return null;
+    }
+    if (z.tipo === 'colosso') {
+      if (z.ia === 'pisao') {
+        if (z.iaT <= 0) {
+          z.ia = 'normal'; z.cdEsp = rand(5, 7) * (vida < 0.5 ? 0.7 : 1);
+          ondaDeChoque(z.x, z.z, z.dano * 0.8);
+          if (!z.avisouPulo) { z.avisouPulo = true; anunciar('PULE a onda de choque!', '#ffa040', 2); }
+        }
+        return { mx: 0, mz: 0 };
+      }
+      if (z.cdEsp <= 0 && dist < 15) { z.ia = 'pisao'; z.iaT = 1.2; som.investida(); return { mx: 0, mz: 0 }; }
+      if (vida < 0.5) {
+        z.cdPedra = (z.cdPedra ?? 3) - dt;
+        if (z.cdPedra <= 0 && dist > 6) { z.cdPedra = 4; lancarProjetil(z.x, 3, z.z, jog.x, jog.z, 15, z.dano * 0.7, 'pedra'); }
+      }
+      return null;
+    }
+    if (z.tipo === 'chefe') {
+      if (!z.fase2 && vida < 0.5) {
+        z.fase2 = true; z.vel *= 1.4;
+        anunciar('A ABOMINAÇÃO ESTÁ FURIOSA!', '#ff3050', 2.5);
+        som.rugido();
+        for (let i = 0; i < 4; i++) spawnZumbi('corredor', z);
+      }
+      if (z.fase2 && z.cdEsp <= 0 && dist > 5) {
+        z.cdEsp = 3.5;
+        for (const e of [-0.25, 0, 0.25]) lancarProjetil(z.x, 3.2, z.z, jog.x, jog.z, 14, z.dano * 0.4, 'acido', e);
+      }
+      return null;
+    }
+    if (z.tipo === 'rainha') {
+      if ((vida < 0.66 && z.invocou < 1) || (vida < 0.33 && z.invocou < 2)) {
+        z.invocou++;
+        anunciar('A RAINHA INVOCOU A NINHADA!', '#ff60ff', 2.5);
+        som.grito();
+        for (let i = 0; i < 4; i++) spawnZumbi('rastejante', z);
+        for (let i = 0; i < 2; i++) spawnZumbi('cuspidor', z);
+      }
+      const furia = vida < 0.5;
+      if (z.cdEsp <= 0 && dist < 30) {
+        z.cdEsp = furia ? 1.8 : 2.8;
+        const n = furia ? 7 : 5;
+        for (let i = 0; i < n; i++) lancarProjetil(z.x, 3.2, z.z, jog.x, jog.z, 13, z.dano * 0.35, 'acido', (i - (n - 1) / 2) * 0.16);
+      }
+      if (dist < 8) return { mx: -dx / d, mz: -dz / d };   // foge
+      if (dist < 16) return { mx: -dz / d * 0.6, mz: dx / d * 0.6 }; // anda em círculo
+      return null;
+    }
+    return null;
+  }
+
+  function iaGritador(z, dt, dx, dz, dist) {
+    z.cdGrito -= dt; z.iaT -= dt;
+    if (z.cdGrito <= 0 && dist < 28) {
+      z.cdGrito = 8; z.iaT = 1;
+      som.grito();
+      feed('Um Gritador fortaleceu a horda!', '#ff9090');
+      for (const o of zumbis) if (o.vivo && o !== z && Math.hypot(o.x - z.x, o.z - z.z) < 16) o.buff = 6;
+      if (zumbis.filter(o => o.vivo).length < 30) for (let i = 0; i < 2; i++) spawnZumbi(Math.random() < 0.5 ? 'corredor' : 'errante', z);
+      for (let i = 0; i < 24; i++) particula(z.x, 1.6 * z.escala, z.z, Math.cos(i / 24 * 6.28) * 7, rand(0, 1), Math.sin(i / 24 * 6.28) * 7, 0.5, 0.06, 0xffffff, 0);
+    }
+    if (z.iaT > 0) return { mx: 0, mz: 0 };
+    const d = dist || 1;
+    if (dist < 10) return { mx: -dx / d, mz: -dz / d };
+    if (dist < 17) return { mx: 0, mz: 0 };
+    return null;
+  }
+
+  // cápsulas ejetadas (na cena da arma, em coordenadas da câmera)
+  let ultimoTiro = -9;
+  const capsulas = [];
+  const matLatao = new THREE.MeshStandardMaterial({ color: 0xd0a040, metalness: 1, roughness: 0.3 });
+  const matCartucho = new THREE.MeshStandardMaterial({ color: 0xb01810, roughness: 0.6 });
+  for (let i = 0; i < 10; i++) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 8), matLatao);
+    m.visible = false; vmCam.add(m);
+    capsulas.push({ m, vida: 0, v: new THREE.Vector3(), w: 0 });
+  }
+  let iCap = 0;
+  function ejetarCapsula(cartucho) {
+    const c = capsulas[iCap]; iCap = (iCap + 1) % capsulas.length;
+    const am = armas[atual].mesh;
+    c.m.material = cartucho ? matCartucho : matLatao;
+    c.m.scale.set(cartucho ? 2.4 : 1, cartucho ? 2 : 1, cartucho ? 2.4 : 1);
+    c.m.position.set(am.position.x + 0.03, am.position.y + 0.03, am.position.z + 0.12);
+    c.v.set(rand(1.0, 1.6), rand(0.9, 1.4), rand(0.1, 0.4));
+    c.w = rand(15, 25); c.vida = 0.55; c.m.visible = true;
   }
 
   function recarregar() {
@@ -823,13 +1460,15 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     cancelAnimationFrame(raf);
     removerInput();
     if (document.pointerLockElement) document.exitPointerLock();
+    const bonusExt = Math.round((sobrevivencia ? 100 * onda : 150 * zona.ondas) * recompensa);
     const resultado = {
-      extraido, abates, onda, ondas: zona.ondas,
-      ganho: Math.round(extraido ? ganho + 150 * zona.ondas * zona.recompensa : ganho * 0.3),
-      bonus: extraido ? Math.round(150 * zona.ondas * zona.recompensa) : 0,
+      extraido, abates, onda, ondas: sobrevivencia ? '∞' : zona.ondas, modo, zonaId: zona.id, mods: [...mod],
+      ganho: Math.round(extraido ? ganho + bonusExt : ganho * 0.3),
+      bonus: extraido ? bonusExt : 0,
       armas: extraido ? armasAchadas : [],
       perdidas: extraido ? [] : armasAchadas,
-      granadas: jog.granadas, kits: jog.kits,
+      granadas: jog.granadas, kits: jog.kits, torretas: jog.torretas,
+      placar, xp: placar.xp + (extraido ? Math.round(200 * recompensa) : 0),
     };
     limpar();
     onFim(resultado);
@@ -843,10 +1482,12 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     vmCena.traverse(o => { if (o.material) o.material.dispose(); });
     geoCaixa.dispose();
     descartaveis.forEach(d => d.dispose && d.dispose());
+    pos.dispose();
     R.clear();
   }
 
   // ---------- input ----------
+  const btnEsq = $('btnEsquiva'), btnFaca = $('btnFacao');
   const teclas = {};
   const mov = { x: 0, z: 0 };
   let gatilho = false, mirando = false, correndo = false;
@@ -878,6 +1519,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     if (e.code === 'KeyQ') trocarArma();
     if (e.code === 'KeyG') lancarGranada();
     if (e.code === 'KeyH' || e.code === 'KeyF') usarKit();
+    if (e.code === 'KeyV' || e.code === 'KeyE') facada();
+    if (e.code === 'KeyC' || e.code === 'ControlLeft' || e.code === 'AltLeft') { e.preventDefault(); esquivar(); }
+    if (e.code === 'KeyT') colocarTorreta();
     if (e.code === 'KeyP') pausar(!pausado);
   };
   const onKeyUp = e => { teclas[e.code] = false; };
@@ -919,6 +1563,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
         else if (acao === 'granada') lancarGranada();
         else if (acao === 'kit') usarKit();
         else if (acao === 'pular') pular();
+        else if (acao === 'facao') facada();
+        else if (acao === 'esquiva') esquivar();
+        else if (acao === 'torreta') colocarTorreta();
         else if (acao === 'pausa') pausar(true);
         alvo.classList.add('ativo');
         continue;
@@ -1003,7 +1650,10 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
 
   function redimensionar() {
     const w = window.innerWidth, h = window.innerHeight;
+    const pr = Math.min(window.devicePixelRatio || 1, qual === 'alto' ? 1.5 : qual === 'medio' ? 1.25 : 1);
+    R.setPixelRatio(pr);
     R.setSize(w, h, false);
+    pos.resize(w, h, pr);
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
     camera.aspect = vmCam.aspect = w / h;
     camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
@@ -1047,12 +1697,22 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     const mag = Math.hypot(f, s);
     if (mag > 1) { f /= mag; s /= mag; }
     correndo = (teclas.ShiftLeft || teclas.ShiftRight || (mobile && Math.hypot(joy.dx, joy.dy) > 0.95)) && f > 0.5 && !gatilho && mira < 0.2;
-    let vel = 5.2 * st.lenta * (correndo ? 1.45 : 1) * (1 - mira * 0.4) * (jog.curando > 0 ? 0.6 : 1);
+    let vel = 5.2 * st.lenta * (correndo ? 1.45 : 1) * (1 - mira * 0.4) * (jog.curando > 0 ? 0.6 : 1) * (1 + 0.04 * nv('velocidade'));
     const sy = Math.sin(jog.yaw), cy = Math.cos(jog.yaw);
     mov.x = (-sy * f + cy * s) * vel;
     mov.z = (-cy * f - sy * s) * vel;
     if (!jog.noChao) { mov.x *= 0.92; mov.z *= 0.92; }
     jog.x += mov.x * dt; jog.z += mov.z * dt;
+    if (jog.dash > 0) { jog.dash -= dt; jog.x += jog.dashX * dt; jog.z += jog.dashZ * dt; }
+    jog.invul = Math.max(0, jog.invul - dt);
+    jog.cdEsq = Math.max(0, jog.cdEsq - dt);
+    jog.cdFaca = Math.max(0, jog.cdFaca - dt);
+    jog.faca = Math.max(0, jog.faca - dt);
+    jog.semDano += dt;
+    if (nv('regen') && jog.semDano > 4 && jog.hp < jog.hpMax && !jog.morto) {
+      jog.hp = Math.min(jog.hpMax, jog.hp + nv('regen') * dt);
+      if (Math.floor(tempo * 4) !== Math.floor((tempo - dt) * 4)) atualizarHudVida();
+    }
     colidir(jog, RAIO_JOG, jog.y);
     // gravidade / pulo / subir em carros e caixas
     const chao = alturaChao(jog.x, jog.z, RAIO_JOG, jog.y);
@@ -1091,7 +1751,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     trocando = Math.max(0, trocando - dt);
     abrirFogo = Math.max(0, abrirFogo - dt * 2.2);
     const autoDispara = o.autoTiro && alvoAssist && alvoAssist.naMira && a.pente > 0;
-    if (!jog.morto && (gatilho || autoDispara) && cadencia <= 0 && recarregando <= 0 && trocando <= 0 && !correndo) {
+    if (!jog.morto && (gatilho || autoDispara) && cadencia <= 0 && recarregando <= 0 && trocando <= 0 && !correndo && jog.faca <= 0) {
       if (st.auto || disparoSolto || mobile || autoDispara) { atirar(); disparoSolto = false; }
     }
     if (recarregando > 0) {
@@ -1126,13 +1786,17 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       const ud = z.g.userData;
       if (!z.vivo) {
         z.morte += dt;
-        ud.corpo.rotation.x = Math.min(Math.PI / 2, z.morte * 5) * -1;
-        ud.corpo.position.y = Math.min(z.morte * 3, 1) * 0.2 * z.escala - Math.max(0, z.morte - 1.5) * 0.6;
-        if (z.morte > 2.6) { cena.remove(z.g); z.g.userData.mats.forEach(m => m.dispose()); zumbis.splice(i, 1); }
+        const k = Math.min(1, z.morte * 3.2);
+        const queda = k * k * (Math.PI / 2) * (z.queda || -1);
+        ud.corpo.rotation.x = queda;
+        ud.corpo.rotation.z = (z.giroQueda || 0) * k;
+        ud.corpo.position.y = Math.sin(k * Math.PI) * 0.15 + 0.12 * k - Math.max(0, z.morte - 3.5) * 0.5;
+        if (ud.bracoE) { ud.bracoE.rotation.x = 2.6 * k; ud.bracoD.rotation.x = 2.2 * k; }
+        if (z.morte > 4.6) { cena.remove(z.g); z.g.userData.mats.forEach(m => m.dispose()); zumbis.splice(i, 1); }
         continue;
       }
       vivos++;
-      if (z.tipo === 'chefe') chefeVivo = z;
+      if (z.def.boss && (!chefeVivo || z.hp / z.hpMax < chefeVivo.hp / chefeVivo.hpMax)) chefeVivo = z;
       const dx = jog.x - z.x, dz = jog.z - z.z, dist = Math.hypot(dx, dz);
       let mx = 0, mz = 0;
       const alcance = z.raio + RAIO_JOG + 0.45;
@@ -1144,8 +1808,24 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
         if (!z.vivo) continue;
       }
 
-      const cuspindo = z.tipo === 'cuspidor' && dist < 14 && dist > 4 && !jog.morto;
-      if (cuspindo) {
+      // comportamentos especiais
+      if (z.buff > 0) z.buff -= dt;
+      if (z.revelado > 0) z.revelado -= dt;
+      if (z.tipo === 'toxico') { z.cdGas -= dt; if (z.cdGas <= 0) { z.cdGas = 3; criarNuvem(z.x, z.z, 2.2, 8, 6); } }
+      if (z.tipo === 'espectro') {
+        const alvoOp = z.revelado > 0 || dist < 5 ? 1 : 0.06;
+        const op = ud.mats[0].opacity + (alvoOp - ud.mats[0].opacity) * Math.min(1, dt * 5);
+        ud.mats.forEach(m => { m.opacity = op; });
+      }
+      let ctrl = null;
+      if (!jog.morto) {
+        if (z.def.boss) ctrl = iaChefe(z, dt, dx, dz, dist);
+        else if (z.tipo === 'gritador') ctrl = iaGritador(z, dt, dx, dz, dist);
+        if (!z.vivo) continue;
+      }
+      const cuspindo = !ctrl && z.tipo === 'cuspidor' && dist < 14 && dist > 4 && !jog.morto;
+      if (ctrl) { mx = ctrl.mx; mz = ctrl.mz; }
+      else if (cuspindo) {
         z.cdCuspe -= dt;
         if (z.cdCuspe <= 0) {
           z.cdCuspe = rand(2.2, 3.2);
@@ -1181,11 +1861,11 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
         if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2); mx += sx / d * (rr - d) * 2.5; mz += sz / d * (rr - d) * 2.5; }
       }
       const andando = Math.hypot(mx, mz) > 0.05;
-      const v = z.vel * (z.ataque > 0 ? 0.3 : 1);
+      const v = z.vel * (z.ataque > 0 ? 0.3 : 1) * (z.buff > 0 ? 1.4 : 1);
       z.x += mx * v * dt; z.z += mz * v * dt;
       colidir(z, z.raio);
       z.g.position.set(z.x, 0, z.z);
-      const yawAlvo = Math.atan2(-dx, -dz);
+      const yawAlvo = z.ia === 'carga' || z.ia === 'prep' && z.iaT <= 0.3 ? Math.atan2(-z.dir.x, -z.dir.z) : ctrl && (ctrl.mx || ctrl.mz) && z.tipo === 'gritador' ? Math.atan2(-mx, -mz) : Math.atan2(-dx, -dz);
       let dy = yawAlvo - z.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
@@ -1195,12 +1875,12 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       // ataque corpo a corpo
       z.cdAtaque -= dt;
       if (z.tipo === 'inchado' && dist < 1.9 && !jog.morto) { z.hp = 0; matar(z, false); continue; }
-      if (dist < alcance && z.cdAtaque <= 0 && z.ataque <= 0 && !jog.morto) z.ataque = 0.45;
+      if (dist < alcance && z.cdAtaque <= 0 && z.ataque <= 0 && !jog.morto && z.ia === 'normal' && z.tonto <= 0) z.ataque = 0.45;
       if (z.ataque > 0) {
         z.ataque -= dt;
         if (z.ataque <= 0) {
           z.cdAtaque = z.tipo === 'corredor' ? 0.7 : 1.1;
-          if (dist < alcance + 0.4) danoJogador(z.dano);
+          if (dist < alcance + 0.4) danoJogador(z.dano * (z.buff > 0 ? 1.3 : 1), false, z);
         }
       }
 
@@ -1213,17 +1893,44 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       ud.bracoE.rotation.x = 1.35 + Math.sin(z.fase * 0.5) * 0.12 + golpe;
       ud.bracoD.rotation.x = 1.45 - Math.sin(z.fase * 0.5) * 0.12 + golpe;
       ud.corpo.rotation.x = -0.12 - (z.tipo === 'corredor' ? 0.25 : 0) - golpe * 0.2;
+      if (ud.canE) { ud.canE.rotation.x = -Math.max(0, passo) * 0.9 - 0.05; ud.canD.rotation.x = -Math.max(0, -passo) * 0.9 - 0.05; }
+      if (ud.antE) { ud.antE.rotation.x = 0.25 + Math.sin(z.fase * 0.7) * 0.15 - golpe * 0.2; ud.antD.rotation.x = 0.3 - Math.sin(z.fase * 0.6) * 0.15 - golpe * 0.2; }
+      if (ud.mandibula) ud.mandibula.rotation.x = 0.12 + Math.abs(Math.sin(tempo * 7 + z.fase)) * 0.18 + golpe * 0.4 + (z.tipo === 'gritador' && z.iaT > 0 ? 0.7 : 0);
+      if (ud.cabeca) { ud.cabeca.rotation.y = Math.sin(tempo * 1.3 + z.fase) * 0.25 + (Math.sin(tempo * 13 + z.fase * 3) > 0.97 ? 0.3 : 0); ud.cabeca.rotation.x = Math.sin(tempo * 0.9 + z.fase) * 0.12; }
+      if (ud.asas) ud.asas.forEach((a, j) => { a.rotation.y = (j ? 1 : -1) * (0.4 + Math.sin(tempo * 6) * 0.25); });
       ud.corpo.position.y = Math.abs(passo) * 0.05;
+      if (z.tipo === 'rastejante') {
+        ud.corpo.rotation.x = -1.25; ud.corpo.position.z = 0.75; ud.corpo.position.y = 0;
+        ud.bracoE.rotation.x = 1.9 + Math.sin(z.fase) * 0.5 + golpe;
+        ud.bracoD.rotation.x = 1.9 - Math.sin(z.fase) * 0.5 + golpe;
+        ud.pernaE.rotation.x = -0.2 + passo * 0.2; ud.pernaD.rotation.x = -0.2 - passo * 0.2;
+      }
+      if (z.ia === 'pisao' || (z.tipo === 'gritador' && z.iaT > 0)) { ud.bracoE.rotation.x = ud.bracoD.rotation.x = 2.9; }
+      if (z.ia === 'prep') { ud.bracoD.rotation.x = 2.8; ud.corpo.rotation.x = 0.15; }
+      if (z.ia === 'carga') { ud.corpo.rotation.x = -0.5; ud.bracoD.rotation.x = 1.6; }
+      if (z.tonto > 0) { ud.corpo.rotation.z = Math.sin(tempo * 8) * 0.15; } else ud.corpo.rotation.z = 0;
 
       z.flash -= dt;
-      const emis = z.flash > 0 ? 0x802020 : z.fogo > 0 ? (Math.random() < 0.5 ? 0x602000 : 0x301000) : 0x000000;
+      const aviso = z.ia === 'prep' || z.ia === 'pisao';
+      const emis = z.flash > 0 ? 0x802020 : aviso ? (Math.sin(tempo * 30) > 0 ? 0xa02000 : 0x400000) : z.fogo > 0 ? (Math.random() < 0.5 ? 0x602000 : 0x301000)
+        : z.buff > 0 ? 0x401808 : z.elite ? 0x403000 : 0x000000;
       if (ud.ultimoEmis !== emis) { ud.mats.forEach(m => m.emissive.setHex(emis)); ud.ultimoEmis = emis; }
 
       z.gemido -= dt;
-      if (z.gemido <= 0) { z.gemido = rand(3, 8); if (dist < 22) { if (z.tipo === 'chefe') som.rugido(); else som.gemido(dist); } }
+      if (z.gemido <= 0) { z.gemido = rand(3, 8); if (dist < 22) { if (z.def.boss) som.rugido(); else som.gemido(dist); } }
     }
     hud.vivos.textContent = estado === 'onda' ? `Zumbis: ${vivos + filaSpawn.length}` : estado === 'extracao' ? 'VÁ PARA O HELIPONTO' : 'Prepare-se';
-    if (chefeVivo) { hud.bossBar.style.display = 'block'; hud.bossFill.style.width = (chefeVivo.hp / chefeVivo.hpMax * 100) + '%'; }
+    if (chefeVivo) {
+      hud.bossBar.style.display = 'block';
+      hud.bossFill.style.width = (chefeVivo.hp / chefeVivo.hpMax * 100) + '%';
+      hud.bossArm.style.width = chefeVivo.armaduraMax ? (Math.max(0, chefeVivo.armadura) / chefeVivo.armaduraMax * 100) + '%' : '0%';
+      hud.bossArm.parentElement.style.display = chefeVivo.armaduraMax ? '' : 'none';
+      if (hud.bossNome.textContent !== chefeVivo.def.nome.toUpperCase()) hud.bossNome.textContent = chefeVivo.def.nome.toUpperCase();
+    }
+    atualizarTorretas(dt);
+    atualizarNuvens(dt);
+    atualizarChoques(dt);
+    atualizarSuprimentos(dt);
 
     // projéteis
     for (let i = projeteis.length - 1; i >= 0; i--) {
@@ -1243,11 +1950,16 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
         }
         if (p.t <= 0) { explodir(p.x, p.y + 0.3, p.z, 6.5, 320, 'granada'); remover = true; }
       } else {
-        if (Math.random() < 0.6) particula(p.x, p.y, p.z, 0, 0, 0, 0.3, 0.06, 0x9cff3a, 0);
+        const cor = p.tipo === 'pedra' ? 0x6a6050 : p.tipo === 'acido' ? 0xd040ff : 0x9cff3a;
+        if (Math.random() < 0.6) particula(p.x, p.y, p.z, 0, 0, 0, 0.3, p.tipo === 'pedra' ? 0.12 : 0.06, cor, 0);
         const dj = Math.hypot(p.x - jog.x, p.z - jog.z);
-        if (dj < 0.7 && p.y > jog.y - 0.2 && p.y < jog.y + 2) { danoJogador(p.dano); sangue(p.x, p.y, p.z, 6, 0x9cff3a); remover = true; }
-        else if (p.y < 0 || p.t <= 0) { sangue(p.x, 0.1, p.z, 8, 0x9cff3a); remover = true; }
-        else for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) { remover = true; break; }
+        const raioP = p.tipo === 'pedra' ? 1.1 : 0.7;
+        let caiu = false;
+        if (dj < raioP && p.y > jog.y - 0.2 && p.y < jog.y + 2) { danoJogador(p.dano, false, { x: p.x - p.vx, z: p.z - p.vz }); sangue(p.x, p.y, p.z, 6, cor); remover = true; }
+        else if (p.y < 0 || p.t <= 0) { sangue(p.x, 0.1, p.z, 8, cor); remover = true; caiu = true; }
+        else for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) { remover = true; caiu = true; break; }
+        if (caiu && p.tipo === 'pedra') { bolaFogo(p.x, 0.5, p.z, 2.5, 0x8a7a60); tremor = Math.max(tremor, 0.2); if (dj < 3) danoJogador(p.dano * 0.5, false, p); }
+        if (caiu && p.tipo === 'acido') criarNuvem(p.x, p.z, 1.8, 10, 3.5);
       }
       p.m.position.set(p.x, p.y, p.z);
       if (remover) { cena.remove(p.m); projeteis.splice(i, 1); }
@@ -1280,42 +1992,52 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     }
 
     // ondas
+    const nomeOnda = n => sobrevivencia ? `Sobrevivência — onda ${n}` : `Onda ${n}/${zona.ondas}`;
     if (estado === 'preparo') {
       timerEstado -= dt;
-      hud.onda.textContent = onda === 0 ? `Raid: ${zona.nome}` : `Onda ${onda}/${zona.ondas} concluída`;
+      hud.onda.textContent = onda === 0 ? `${sobrevivencia ? 'Sobrevivência' : 'Raid'}: ${zona.nome}` : `${nomeOnda(onda)} concluída`;
       if (timerEstado <= 0) {
         onda++;
         filaSpawn = montarOnda(onda);
         estado = 'onda';
-        anunciar(onda === zona.ondas ? `ONDA FINAL ${onda}` : `ONDA ${onda}`, onda === zona.ondas ? '#ff4050' : '#fff');
+        const final = onda === TOTAL_ONDAS;
+        const chefeNaOnda = filaSpawn.some(t => ZUMBIS[t].boss);
+        anunciar(final ? `ONDA FINAL ${onda}` : chefeNaOnda ? `ONDA ${onda} — CHEFE!` : `ONDA ${onda}`, final || chefeNaOnda ? '#ff4050' : '#fff');
         som.onda();
+        if (onda === 2 || onda % 3 === 0) proxSuprimento = rand(10, 18);
       } else if (timerEstado < 3.2 && Math.floor(timerEstado + dt) !== Math.floor(timerEstado)) {
         anunciar(`Próxima onda em ${Math.ceil(timerEstado)}`, '#ccc', 1);
       }
     } else if (estado === 'onda') {
-      hud.onda.textContent = `Onda ${onda}/${zona.ondas}`;
+      hud.onda.textContent = nomeOnda(onda);
       timerSpawn -= dt;
-      const maxVivos = Math.min(28, 12 + onda * 1.5);
+      const maxVivos = Math.min(30, 12 + onda * 1.5);
       if (filaSpawn.length && timerSpawn <= 0 && vivos < maxVivos) {
         spawnZumbi(filaSpawn.shift());
         timerSpawn = Math.max(0.3, 1.1 - onda * 0.07);
       }
       if (!filaSpawn.length && vivos === 0) {
-        const bonus = Math.round(60 * onda * zona.recompensa);
+        const bonus = Math.round(60 * Math.min(onda, 30) * recompensa);
         ganho += bonus;
         feed(`Onda ${onda} limpa +${fmt(bonus)}`, '#9f9');
         soltarLoot('municao', 0, 2);
         if (onda % 2 === 0) soltarLoot('vida', 2, 0);
-        if (onda >= zona.ondas) {
+        if (!sobrevivencia && onda >= zona.ondas) {
           estado = 'extracao';
           feixe.visible = true;
           hud.ext.style.display = 'block';
           anunciar('EXTRAÇÃO LIBERADA! Vá ao heliponto', '#40ff80', 4);
           som.raro();
+        } else if (sobrevivencia && onda % 5 === 0) {
+          estado = 'extracao'; janela = 30;
+          feixe.visible = true;
+          hud.ext.style.display = 'block';
+          anunciar('Helicóptero por 30s! Extraia ou continue lutando', '#40ff80', 4);
+          som.raro();
         } else { estado = 'preparo'; timerEstado = 7; }
       }
     } else if (estado === 'extracao') {
-      hud.onda.textContent = 'EXTRAÇÃO';
+      hud.onda.textContent = sobrevivencia ? `EXTRAÇÃO (${Math.ceil(janela)}s)` : 'EXTRAÇÃO';
       timerTrickle -= dt;
       if (timerTrickle <= 0 && vivos < 12) { spawnZumbi(Math.random() < 0.3 ? 'corredor' : 'errante'); timerTrickle = 2.2; }
       const dh = Math.hypot(jog.x - CEL_HELI.x, jog.z - CEL_HELI.z);
@@ -1323,6 +2045,14 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       hud.extFill.style.width = (extracao * 100) + '%';
       feixe.material.opacity = 0.1 + Math.sin(tempo * 4) * 0.05;
       if (extracao >= 1) { anunciar('EXTRAÍDO!', '#40ff80'); terminar(true); return; }
+      if (sobrevivencia) {
+        janela -= dt;
+        if (janela <= 0) {
+          estado = 'preparo'; timerEstado = 3; extracao = 0;
+          feixe.visible = false; hud.ext.style.display = 'none';
+          anunciar('O helicóptero foi embora... continue sobrevivendo!', '#ff9060', 3);
+        }
+      }
     }
     hud.grana.textContent = fmt(ganho);
 
@@ -1352,7 +2082,36 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     }
     for (const fg of fogos) {
       fg.luz.intensity = 20 + Math.random() * 12;
-      if (Math.random() < dt * 30) particula(fg.x + rand(-1.2, 1.2), 1.6, fg.z + rand(-0.6, 0.6), rand(-0.3, 0.3), rand(1.5, 3.5), rand(-0.3, 0.3), rand(0.4, 0.9), rand(0.1, 0.22), Math.random() < 0.6 ? 0xff6a10 : 0xffb020, -1);
+      const lg = fg.larg || 1.2;
+      if (Math.random() < dt * 30) particula(fg.x + rand(-lg, lg), fg.y || 1.6, fg.z + rand(-lg * 0.5, lg * 0.5), rand(-0.3, 0.3), rand(1.5, 3.5), rand(-0.3, 0.3), rand(0.4, 0.9), rand(0.1, 0.22), Math.random() < 0.6 ? 0xff6a10 : 0xffb020, -1);
+      if (Math.random() < dt * 4) marcas.fumaca(fg.x + rand(-0.3, 0.3), (fg.y || 1.6) + 1.2, fg.z, 1.2);
+    }
+    ceu.update(dt, camera.position);
+    clima.update(dt, camera.position);
+    nevoa.update(dt, camera.position);
+    marcas.update(dt);
+    for (const n of neons) {
+      if (!n.pisca) continue;
+      n.t -= dt;
+      if (n.t <= 0) { n.t = Math.random() < 0.8 ? rand(0.03, 0.12) : rand(1, 4); n.m.visible = !n.m.visible || Math.random() < 0.3; }
+    }
+    for (const v of piscas) {
+      const fase = Math.floor(tempo * 4) % 2;
+      v.vermelho.visible = fase === 0; v.azul.visible = fase === 1;
+      v.luz.color.setHex(fase ? 0x2040ff : 0xff2020);
+    }
+    luzesPouso.forEach((l, i) => { l.visible = estado === 'extracao' ? Math.floor(tempo * 6 + i) % 2 === 0 : i % 2 === 0; });
+    if (zona.id === 'base' || mod.has('lua')) {
+      proxRelampago -= dt;
+      if (proxRelampago <= 0) { relampago = 1; proxRelampago = rand(8, 18); setTimeout(() => !acabou && som.pisao(), rand(300, 1200)); }
+    }
+    relampago = Math.max(0, relampago - dt * 3);
+    const flashR = relampago > 0.6 || (relampago > 0.2 && relampago < 0.35) ? relampago : 0;
+    ceu.flash(flashR);
+    hemi.intensity = (mod.has('escuridao') ? 0.3 : 0.75) + flashR * 2.5;
+    if (alto) {
+      lua.position.set(jog.x + luaDir.x * 50, luaDir.y * 50, jog.z + luaDir.z * 50);
+      lua.target.position.set(jog.x, 0, jog.z);
     }
     if (anuncioT > 0) { anuncioT -= dt; if (anuncioT <= 0) hud.anuncio.style.opacity = 0; }
     flashDano = Math.max(0, flashDano - dt * 1.5);
@@ -1366,7 +2125,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     const bob = Math.hypot(mov.x, mov.z) > 0.1 ? 1 : 0;
     camera.position.set(jog.x, (jog.morto ? 0.5 : jog.y + ALTURA_OLHO - jog.pousou * 0.12) + Math.sin(jog.passo * 2) * 0.035 * bob * (1 - mira) * (jog.noChao ? 1 : 0), jog.z);
     camera.rotation.set(jog.pitch + rand(-1, 1) * tremor * 0.03, jog.yaw + rand(-1, 1) * tremor * 0.03, jog.morto ? 0.5 : 0);
-    const fovAlvo = 75 / (1 + (a.st.zoom - 1) * mira) + (correndo ? 6 : 0);
+    const fovAlvo = 75 / (1 + (a.st.zoom - 1) * mira) + (correndo ? 6 : 0) + (jog.dash > 0 ? 10 : 0);
     if (Math.abs(camera.fov - fovAlvo) > 0.05) { camera.fov += (fovAlvo - camera.fov) * Math.min(1, dt * 14); camera.updateProjectionMatrix(); }
     vmCam.position.copy(camera.position);
     vmCam.quaternion.copy(camera.quaternion);
@@ -1374,8 +2133,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     // arma na mão
     chute = Math.max(0, chute - dt * 9);
     const comp = a.mesh.userData.comprimento;
-    const base = { x: 0.2, y: -0.2, z: -0.5 - comp * 0.3 };
-    const ads = { x: 0, y: a.def.tipo === 'sniper' ? -0.11 : -0.125, z: -0.55 - comp * 0.2 };
+    const pist = a.def.tipo === 'pistola';
+    const base = pist ? { x: 0.13, y: -0.13, z: -0.32 } : { x: 0.15, y: -0.155, z: -0.3 - comp * 0.08 };
+    const ads = { x: 0, y: -(a.mesh.userData.miraY || 0.08), z: pist ? -0.38 : -0.3 };
     const sw = Math.sin(jog.passo) * 0.012 * bob * (1 - mira), sh = Math.abs(Math.cos(jog.passo)) * 0.01 * bob * (1 - mira);
     let px = base.x + (ads.x - base.x) * mira + sw;
     let py = base.y + (ads.y - base.y) * mira - sh - jog.pousou * 0.04 + clamp(jog.vy, -8, 8) * -0.004;
@@ -1388,12 +2148,40 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     if (trocando > 0) py -= (trocando / 0.45) * 0.35;
     if (correndo) { ry = 0.6; rx -= 0.25; px -= 0.04; py -= 0.04; }
     if (jog.curando > 0) py -= 0.3;
+    if (jog.faca > 0) py -= 0.35; // abaixa a arma para o golpe do facão
+    if (jog.dash > 0) { rz += 0.3; px -= 0.05; }
     a.mesh.position.set(px, py, pz);
     a.mesh.rotation.set(rx, ry, rz);
+    // golpe do facão: corta da direita para a esquerda
+    facaMesh.visible = jog.faca > 0 && !jog.morto;
+    if (facaMesh.visible) {
+      const k = 1 - jog.faca / 0.32;
+      facaMesh.position.set(0.28 - k * 0.5, -0.12 - Math.sin(k * Math.PI) * 0.06, -0.38);
+      facaMesh.rotation.set(-0.3, 0.6 - k * 1.6, -0.9 + k * 0.4);
+    }
     const sniperMira = a.def.tipo === 'sniper' && mira > 0.85;
     a.mesh.visible = !sniperMira && !jog.morto;
     hud.luneta.style.display = sniperMira ? 'block' : 'none';
-    a.mesh.traverse(o => { if (o.userData.pulsa) o.scale.setScalar(0.03 * (1 + Math.sin(tempo * 6) * 0.35)); });
+    const uda = a.mesh.userData;
+    uda.animar(tempo);
+    if (a.def.tipo === 'escopeta') {
+      const kp = clamp((tempo - ultimoTiro - 0.12) / 0.38, 0, 1);
+      uda.ferrolho.position.z = Math.sin(kp * Math.PI) * uda.ferroCurso;
+    } else uda.ferrolho.position.z = chute * uda.ferroCurso;
+    if (recarregando > 0) {
+      const kr = 1 - recarregando / a.st.recarga;
+      uda.carregador.position.y = -Math.sin(Math.min(1, kr * 1.25) * Math.PI) * 0.2;
+      uda.carregador.visible = !(kr > 0.32 && kr < 0.55);
+    } else { uda.carregador.position.y = 0; uda.carregador.visible = true; }
+    for (const c of capsulas) {
+      if (c.vida <= 0) continue;
+      c.vida -= dt;
+      c.v.y -= 7 * dt;
+      c.m.position.addScaledVector(c.v, dt);
+      c.m.rotation.x += c.w * dt; c.m.rotation.z += c.w * 0.6 * dt;
+      if (c.vida <= 0) c.m.visible = false;
+    }
+    vmLuzTiro.intensity = Math.max(0, vmLuzTiro.intensity - dt * 60);
 
     // clarão do tiro
     flashT -= dt;
@@ -1406,10 +2194,12 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     } else muzzleSprite.visible = false;
     luzTiro.intensity = Math.max(0, luzTiro.intensity - dt * 400);
 
-    R.clear();
-    R.render(cena, camera);
-    R.clearDepth();
-    R.render(vmCena, vmCam);
+    if (pos.grade) {
+      pos.grade.uniforms.uTempo.value = tempo;
+      pos.grade.uniforms.uBaixa.value = jog.morto ? 1 : clamp(1 - jog.hp / (jog.hpMax * 0.35), 0, 1);
+      pos.grade.uniforms.uDano.value = Math.min(1, flashDano);
+    }
+    pos.render();
 
     // HUD por quadro
     const spread = (a.st.disp * (1 - mira * 0.7) * (Math.hypot(mov.x, mov.z) > 0.1 ? 1.5 : 1) * (1 + Math.min(abrirFogo, 1) * 0.8)) * 900 + 6;
@@ -1417,8 +2207,12 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
     hud.mira.style.opacity = sniperMira ? 0 : (1 - mira * 0.6);
     hud.mira.classList.toggle('travada', !!(alvoAssist && alvoAssist.naMira));
     hud.hit.style.opacity = hitmarker > 0 ? 1 : 0;
+    if (mobile) {
+      btnEsq.style.opacity = jog.cdEsq > 0 ? 0.35 : 1;
+      btnFaca.style.opacity = jog.cdFaca > 0 ? 0.5 : 1;
+    }
     hud.hit.classList.toggle('cabeca', hitCabeca);
-    hud.dano.style.opacity = Math.max(flashDano, jog.hp < 30 ? 0.35 + Math.sin(tempo * 5) * 0.15 : 0);
+    hud.dano.style.opacity = pos.grade ? flashDano * 0.5 : Math.max(flashDano, jog.hp < 30 ? 0.35 + Math.sin(tempo * 5) * 0.15 : 0);
 
     const w = window.innerWidth, h = window.innerHeight;
     for (const n of numsPool) {
@@ -1441,10 +2235,12 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
       mctx.fillStyle = l.tipo === 'arma' ? TIERS[l.valor.tier].cor : l.tipo === 'grana' ? '#3f3' : l.tipo === 'vida' ? '#fff' : '#fd3';
       mctx.fillRect((l.x + L) * s - 2, (l.z + L) * s - 2, 4, 4);
     }
+    for (const sp of suprimentos) { mctx.fillStyle = '#ff4030'; mctx.fillRect((sp.x + L) * s - 3, (sp.z + L) * s - 3, 6, 6); }
+    for (const t of torretas) { mctx.fillStyle = '#7f7'; mctx.fillRect((t.x + L) * s - 2, (t.z + L) * s - 2, 4, 4); }
     for (const z of zumbis) {
-      if (!z.vivo) continue;
-      mctx.fillStyle = z.tipo === 'chefe' ? '#f0f' : '#f33';
-      const r = z.tipo === 'chefe' ? 4 : z.tipo === 'bruto' ? 3 : 2;
+      if (!z.vivo || (z.tipo === 'espectro' && z.revelado <= 0)) continue;
+      mctx.fillStyle = z.def.boss ? '#f0f' : z.elite ? '#fd3' : '#f33';
+      const r = z.def.boss ? 5 : z.tipo === 'bruto' || z.elite ? 3 : 2;
       mctx.fillRect((z.x + L) * s - r / 2, (z.z + L) * s - r / 2, r, r);
     }
     mctx.save();
@@ -1471,7 +2267,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim }) {
   anunciar(zona.nome.toUpperCase(), '#fff', 3);
   raf = requestAnimationFrame(t => { ultimo = t; quadro(t); });
 
-  if (location.search.includes('debug')) window.__raid = { jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; } };
+  if (location.search.includes('debug')) window.__raid = { jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; }, facada, esquivar, colocarTorreta, lancarSuprimento, placar, get ganho() { return ganho; } };
   return {
     pausar,
     abandonar() { pausado = false; terminar(false); },
