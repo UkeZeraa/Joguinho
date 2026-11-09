@@ -1,0 +1,18 @@
+{
+  "key.categories.professoria": "Professor IA",
+  "key.professoria.open": "Open Professor chat",
+  "key.professoria.hud": "Toggle blueprint HUD",
+  "professoria.configuration.title": "Professor IA",
+  "professoria.configuration.api": "API (Claude)",
+  "professoria.configuration.chave": "Chave da API",
+  "professoria.configuration.modelo": "Modelo",
+  "professoria.configuration.esforco": "Esforco de raciocinio",
+  "professoria.configuration.maxConsultas": "Maximo de consultas por pergunta",
+  "professoria.configuration.fallbackEmRecusa": "Fallback em recusa",
+  "professoria.configuration.tamanhoMaxConversaK": "Tamanho maximo da conversa (mil tokens)",
+  "professoria.configuration.professor": "Professor",
+  "professoria.configuration.proximaFaseAutomatica": "Proxima fase automatica",
+  "professoria.configuration.visitaMinutos": "Visita automatica (minutos, 0 = off)",
+  "professoria.configuration.espelharNoChat": "Espelhar respostas no chat",
+  "professoria.configuration.mostrarHud": "Mostrar blueprint na tela"
+}

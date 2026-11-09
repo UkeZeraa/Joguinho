@@ -1,0 +1,133 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            // ./gradlew runClient -PprofessoriaDemo abre a tela do Professor com dados de exemplo
+            if (project.hasProperty('professoriaDemo')) systemProperty 'professoria.demo', 'true'
+        }
+        server {
+            server()
+            programArgument '--nogui'
+        }
+        configureEach {
+            logLevel = org.slf4j.event.Level.INFO
+            // Confere, ao iniciar, se o SDK do Claude carregou (nao faz chamada de rede)
+            systemProperty 'professoria.selftest', 'true'
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+dependencies {
+    // SDK oficial da Anthropic (Claude).
+    implementation("com.anthropic:anthropic-java:${anthropic_java_version}") {
+        exclude group: 'org.slf4j' // o Minecraft ja traz o slf4j (versao fixa)
+    }
+    // Em ambiente de desenvolvimento (runClient/runServer) as bibliotecas comuns
+    // precisam estar no classpath do jogo.
+    additionalRuntimeClasspath("com.anthropic:anthropic-java:${anthropic_java_version}") {
+        exclude group: 'org.slf4j' // o Minecraft ja traz o slf4j
+    }
+
+    // O SDK e suas dependencias vao embutidos no .jar do mod (Jar-in-Jar), entao o jogador nao
+    // precisa instalar nada alem do mod. O Jar-in-Jar do NeoForge nao e transitivo: cada biblioteca
+    // e listada aqui com uma faixa de versoes, para o NeoForge poder escolher uma unica versao
+    // quando outro mod (ex.: Kotlin for Forge) trouxer a mesma biblioteca.
+    // O slf4j fica de fora porque o Minecraft ja o fornece.
+    def embedded = [
+            // [grupo:artefato, versao preferida, limite superior (exclusivo)]
+            ['com.anthropic:anthropic-java', anthropic_java_version, '4.0.0'],
+            ['com.anthropic:anthropic-java-core', anthropic_java_version, '4.0.0'],
+            ['com.anthropic:anthropic-java-client-okhttp', anthropic_java_version, '4.0.0'],
+            ['com.squareup.okhttp3:okhttp', '4.12.0', '5.0.0'],
+            ['com.squareup.okio:okio-jvm', '3.6.0', '4.0.0'],
+            ['com.fasterxml.jackson.core:jackson-core', '2.19.4', '3.0.0'],
+            ['com.fasterxml.jackson.core:jackson-databind', '2.19.4', '3.0.0'],
+            ['com.fasterxml.jackson.core:jackson-annotations', '2.19.4', '3.0.0'],
+            ['com.fasterxml.jackson.datatype:jackson-datatype-jsr310', '2.19.4', '3.0.0'],
+            ['com.fasterxml.jackson.datatype:jackson-datatype-jdk8', '2.19.4', '3.0.0'],
+            ['com.fasterxml.jackson.module:jackson-module-kotlin', '2.19.4', '3.0.0'],
+            ['com.fasterxml:classmate', '1.7.0', '2.0.0'],
+            ['com.github.victools:jsonschema-generator', '4.38.0', '5.0.0'],
+            ['com.github.victools:jsonschema-module-jackson', '4.38.0', '5.0.0'],
+            ['com.github.victools:jsonschema-module-swagger-2', '4.38.0', '5.0.0'],
+            ['io.swagger.core.v3:swagger-annotations', '2.2.50', '3.0.0'],
+            ['com.standardwebhooks:standardwebhooks', '1.2.0', '2.0.0'],
+            ['io.opentelemetry:opentelemetry-api', '1.62.0', '2.0.0'],
+            ['io.opentelemetry:opentelemetry-context', '1.62.0', '2.0.0'],
+            ['io.opentelemetry:opentelemetry-common', '1.62.0', '2.0.0'],
+            ['org.jetbrains.kotlin:kotlin-stdlib', '1.9.25', '3.0.0'],
+            ['org.jetbrains.kotlin:kotlin-reflect', '1.9.25', '3.0.0'],
+            ['org.jetbrains:annotations', '13.0', '100.0'],
+            ['com.google.errorprone:error_prone_annotations', '2.50.0', '3.0.0'],
+    ]
+    embedded.each { e ->
+        jarJar(e[0]) {
+            transitive = false
+            version {
+                strictly "[${e[1]},${e[2]})"
+                prefer e[1]
+            }
+        }
+    }
+
+    testImplementation 'com.google.code.gson:gson:2.11.0'
+    testImplementation platform('org.junit:junit-bom:5.11.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+            mod_description        : mod_description
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into 'build/generated/sources/modMetadata'
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
