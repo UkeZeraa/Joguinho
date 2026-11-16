@@ -1,0 +1,4 @@
+# nunca suba chaves de API (Fish Audio, Google Play, etc.)
+.env
+.env.*
+*.key

@@ -2,7 +2,7 @@
 // Cada parte (corpo da arma, braço do zumbi...) é feita de muitas peças pequenas que
 // são juntadas numa única malha com cores por vértice: muito detalhe e poucas chamadas de desenho.
 import * as THREE from 'three';
-import { TIERS, CAMOS, ZUMBIS } from './dados.js';
+import { TIERS, CAMOS, ZUMBIS, SLOTS_MOD, MOD_POR_ID, modCabe, slotLiberado } from './dados.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const escolher = a => a[Math.floor(Math.random() * a.length)];
@@ -16,6 +16,10 @@ const GEOS = {
   esf: new THREE.SphereGeometry(0.5, 10, 7).toNonIndexed(),
   oct: new THREE.OctahedronGeometry(0.5, 0).toNonIndexed(),
   anel: new THREE.TorusGeometry(0.5, 0.12, 6, 16).toNonIndexed(),
+  // pirâmide de base quadrada (telhados de 4 águas)
+  pir: new THREE.CylinderGeometry(0, 0.7071, 1, 4, 1).rotateY(Math.PI / 4).toNonIndexed(),
+  // cúpula/meia-esfera achatada
+  cup: new THREE.SphereGeometry(0.5, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).toNonIndexed(),
 };
 const _m = new THREE.Matrix4(), _nm = new THREE.Matrix3(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _c = new THREE.Color();
@@ -261,6 +265,141 @@ function faixas(A, tier, larg, y, z0, comp) {
       A.b('brilho', larg + 0.003, rand(0.006, 0.018), 0.003, 0, y - rand(0.005, 0.02), z);
     }
   }
+}
+
+
+// ======================================================================= ACESSÓRIOS (mods) NA ARMA
+// top: altura do trilho de cima · zm: z da mira · my: altura do cano · mag: [y, z] do carregador · guarda: z sob o cano
+const ANX = {
+  pistola:         { top: 0.052, zm: -0.03,  my: 0.022, mag: [-0.135, 0.04],  guarda: -0.12 },
+  submetralhadora: { top: 0.062, zm: -0.12,  my: 0.004, mag: [-0.25, -0.11],  guarda: -0.3 },
+  fuzil:           { top: 0.068, zm: -0.14,  my: 0.012, mag: [-0.31, -0.04],  guarda: -0.38 },
+  escopeta:        { top: 0.058, zm: -0.14,  my: 0.022, mag: null,            guarda: -0.4 },
+  sniper:          { top: 0.075, zm: -0.12,  my: 0.004, mag: [-0.1, -0.06],   guarda: -0.42 },
+  metralhadora:    { top: 0.088, zm: -0.12,  my: 0.004, mag: [-0.17, -0.12],  guarda: -0.46 },
+};
+export function modsAtivos(arma) {
+  const r = {};
+  for (const sl of SLOTS_MOD) {
+    const id = arma.mods && arma.mods[sl.id], m = id && MOD_POR_ID[id];
+    if (m && modCabe(m, arma) && slotLiberado(arma, sl.id)) r[sl.id] = m;
+  }
+  return r;
+}
+function anexos(arma, A, C, ponta) {
+  const M = modsAtivos(arma), P = ANX[arma.tipo];
+  let miraY = 0;
+  if (M.mira) {
+    const y = P.top, z = P.zm, id = M.mira.id;
+    if (id === 'reddot') {
+      A.b('metal', 0.03, 0.01, 0.05, 0, y + 0.005, z, { cor: PRETO });
+      A.b('metal', 0.028, 0.028, 0.045, 0, y + 0.024, z, { cor: PRETO });
+      A.b('vidro', 0.022, 0.022, 0.002, 0, y + 0.026, z - 0.0235);
+      A.b('mira', 0.004, 0.004, 0.003, 0, y + 0.026, z - 0.02);
+      miraY = y + 0.026;
+    } else if (id === 'holo') {
+      A.b('metal', 0.034, 0.01, 0.07, 0, y + 0.005, z, { cor: PRETO });
+      A.b('metal', 0.005, 0.034, 0.06, 0.018, y + 0.027, z, { cor: CINZA });
+      A.b('metal', 0.005, 0.034, 0.06, -0.018, y + 0.027, z, { cor: CINZA });
+      A.b('metal', 0.04, 0.005, 0.06, 0, y + 0.046, z, { cor: CINZA });
+      A.b('vidro', 0.03, 0.03, 0.002, 0, y + 0.028, z - 0.03);
+      A.b('mira', 0.014, 0.0025, 0.002, 0, y + 0.028, z - 0.027);
+      A.b('mira', 0.0025, 0.014, 0.002, 0, y + 0.028, z - 0.027);
+      miraY = y + 0.03;
+    } else {
+      const term = id === 'termica';
+      A.b('metal', 0.034, 0.012, 0.09, 0, y + 0.006, z, { cor: PRETO });
+      A.t('metal', 0.024, 0.15, 0, y + 0.036, z, { cor: term ? 0x1a1e22 : CINZA });
+      A.t('metal', 0.034, 0.04, 0, y + 0.036, z - 0.085, { cor: PRETO });
+      A.t('vidro', 0.03, 0.004, 0, y + 0.036, z - 0.106);
+      A.t('metal', 0.026, 0.03, 0, y + 0.036, z + 0.085, { cor: PRETO });
+      A.b('metal', 0.012, 0.012, 0.016, 0.022, y + 0.038, z, { cor: CINZA_CLARO });
+      A.b('metal', 0.012, 0.012, 0.016, 0, y + 0.062, z, { cor: CINZA_CLARO });
+      if (term) { A.t('brilho', 0.027, 0.008, 0, y + 0.036, z - 0.05); A.t('brilho', 0.027, 0.008, 0, y + 0.036, z + 0.05); }
+      miraY = y + 0.036;
+    }
+  }
+  let ext = 0;
+  if (M.cano) {
+    const y = P.my, z0 = ponta, id = M.cano.id;
+    if (id === 'compensador') {
+      A.t('metal', 0.0125, 0.05, 0, y, z0 - 0.025, { cor: ESCURO });
+      for (let i = 0; i < 3; i++) A.b('metal', 0.03, 0.005, 0.006, 0, y, z0 - 0.015 - i * 0.012, { cor: PRETO });
+      ext = 0.05;
+    } else if (id === 'longo') {
+      A.t('metal', 0.009, 0.12, 0, y, z0 - 0.06, { cor: CINZA });
+      A.t('metal', 0.013, 0.02, 0, y, z0 - 0.12, { cor: ESCURO });
+      ext = 0.12;
+    } else if (id === 'silenciador') {
+      A.t('metal', 0.0205, 0.17, 0, y, z0 - 0.085, { cor: 0x101112 });
+      for (let i = 0; i < 4; i++) A.t('metal', 0.0215, 0.006, 0, y, z0 - 0.03 - i * 0.035, { cor: CINZA });
+      ext = 0.17;
+    } else if (id === 'choke') {
+      A.t('metal', 0.017, 0.035, 0, y, z0 - 0.0175, { cor: CINZA });
+      A.t('metal', 0.019, 0.006, 0, y, z0 - 0.034, { cor: ESCURO });
+      ext = 0.035;
+    } else if (id === 'freio') {
+      A.b('metal', 0.034, 0.024, 0.055, 0, y, z0 - 0.0275, { cor: ESCURO });
+      for (let i = 0; i < 3; i++) { A.b('metal', 0.036, 0.008, 0.005, 0, y, z0 - 0.012 - i * 0.014, { cor: PRETO }); }
+      ext = 0.055;
+    } else if (id === 'pesado') {
+      A.t('metal', 0.017, 0.1, 0, y, z0 - 0.05, { cor: PRETO });
+      A.t('brilho', 0.019, 0.006, 0, y, z0 - 0.03);
+      A.t('brilho', 0.019, 0.006, 0, y, z0 - 0.07);
+      ext = 0.1;
+    } else if (id === 'curto') {
+      A.b('metal', 0.004, 0.01, 0.01, 0, y + 0.02, z0 + 0.02, { cor: ESCURO }); // só uma luva fina: cano é encurtado visualmente
+    }
+  }
+  if (M.carregador && (P.mag || arma.tipo === 'escopeta')) {
+    const id = M.carregador.id;
+    if (!P.mag) { // escopeta: porta-cartuchos na lateral
+      const n = id === 'tambor' ? 0 : 5;
+      A.b('polimero', 0.02, 0.026, 0.12, 0.036, 0.0, -0.1, { cor: PRETO });
+      for (let i = 0; i < n; i++) A.t('metal', 0.007, 0.03, 0.04, 0.0, -0.06 - i * 0.022, { cor: 0xa02a20, rz: 0.0 });
+    } else {
+      const [my, mz] = P.mag;
+      if (id === 'estendido') {
+        C.b('metal', 0.036, 0.075, 0.06, 0, my - 0.02, mz, { cor: CINZA });
+        C.b('polimero', 0.04, 0.012, 0.066, 0, my - 0.06, mz, { cor: PRETO });
+      } else if (id === 'rapido') {
+        C.b('metal', 0.036, 0.02, 0.06, 0, my - 0.01, mz, { cor: CINZA });
+        C.b('brilho', 0.03, 0.01, 0.02, 0, my - 0.025, mz + 0.03);
+      } else if (id === 'duplo') {
+        C.b('metal', 0.034, 0.1, 0.05, 0, my + 0.0, mz + 0.056, { cor: CINZA });
+        C.b('polimero', 0.036, 0.01, 0.054, 0, my - 0.05, mz + 0.056, { cor: PRETO });
+        C.b('polimero', 0.036, 0.02, 0.016, 0, my - 0.0, mz + 0.03, { cor: PRETO }); // fita
+      } else if (id === 'tambor') {
+        C.c('metal', 0.075, 0.06, 0, my - 0.05, mz, { rz: Math.PI / 2, cor: CINZA });
+        C.c('metal', 0.04, 0.064, 0, my - 0.05, mz, { rz: Math.PI / 2, cor: PRETO });
+        C.c('brilho', 0.078, 0.006, 0, my - 0.05, mz, { rz: Math.PI / 2 });
+      } else if (id === 'bateria') {
+        C.b('metal', 0.04, 0.09, 0.07, 0, my - 0.03, mz, { cor: PRETO });
+        C.b('brilho', 0.042, 0.01, 0.06, 0, my - 0.05, mz);
+      }
+    }
+  }
+  if (M.empunhadura) {
+    const id = M.empunhadura.id, y = P.my - 0.03, z = P.guarda;
+    if (id === 'vertical' || id === 'tatica') {
+      A.b('polimero', 0.022, 0.075, 0.028, 0, y - 0.0375, z, { cor: PRETO });
+      A.b('metal', 0.026, 0.01, 0.034, 0, y - 0.01, z, { cor: CINZA });
+      if (id === 'tatica') A.b('brilho', 0.003, 0.05, 0.003, 0.012, y - 0.04, z);
+    } else if (id === 'angular') {
+      A.b('polimero', 0.024, 0.04, 0.07, 0, y - 0.02, z, { cor: PRETO, rx: -0.35 });
+    } else if (id === 'coronha') {
+      if (arma.tipo === 'pistola') A.b('metal', 0.034, 0.03, 0.05, 0, -0.03, -0.09, { cor: CINZA });
+      else { A.b('polimero', 0.05, 0.1, 0.06, 0, -0.012, 0.34, { cor: PRETO }); A.b('metal', 0.052, 0.02, 0.064, 0, -0.06, 0.34, { cor: CINZA }); }
+    } else if (id === 'gatilho') {
+      A.b('brilho', 0.006, 0.026, 0.012, 0.0, -0.045, -0.02);
+      A.b('metal', 0.012, 0.01, 0.03, 0, -0.03, -0.02, { cor: CINZA_CLARO });
+    }
+  }
+  if (M.municao) {
+    A.b('brilho', 0.0025, 0.014, 0.07, 0.0325, 0.0, -0.05);
+    A.b('brilho', 0.0025, 0.014, 0.07, -0.0325, 0.0, -0.05);
+  }
+  return { ponta: ponta - ext, miraY };
 }
 
 export function criarArma(arma, opcoes = {}) {
@@ -567,6 +706,8 @@ export function criarArma(arma, opcoes = {}) {
     anim.push({ o: runa, tipo: 'flutua' });
   }
 
+  const anx = anexos(arma, A, C, ponta);
+  ponta = anx.ponta;
   A.malhas(mats, g);
   const ferrolho = F.malhas(mats);
   g.add(ferrolho);
@@ -584,7 +725,7 @@ export function criarArma(arma, opcoes = {}) {
   }
 
   const MIRA = { pistola: [0.045, 0.056], submetralhadora: [0.058, 0.074], fuzil: [0.08, 0.085], escopeta: [0.047, 0.075], sniper: [0.075, 0.075], metralhadora: [0.08, 0.107] };
-  const miraY = (MIRA[arma.tipo] || [0.08, 0.08])[tier >= 2 ? 1 : 0];
+  const miraY = Math.max((MIRA[arma.tipo] || [0.08, 0.08])[tier >= 2 ? 1 : 0], anx.miraY);
   g.userData = {
     muzzle, comprimento: Math.abs(ponta), ferrolho, carregador, ferroCurso, miraY,
     animar(t) {

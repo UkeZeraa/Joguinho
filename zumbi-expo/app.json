@@ -2,11 +2,38 @@
   "expo": {
     "name": "Apocalipse Z",
     "slug": "apocalipse-z",
+    "scheme": "apocalipsez",
     "version": "1.0.0",
     "orientation": "landscape",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
-    "ios": { "requireFullScreen": true },
-    "android": { "edgeToEdgeEnabled": true }
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0606"
+    },
+    "plugins": [
+      "expo-screen-orientation"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.ukezeraa.apocalipsez",
+      "buildNumber": "1",
+      "requireFullScreen": true,
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.ukezeraa.apocalipsez",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "permissions": [],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#120808"
+      }
+    }
   }
 }

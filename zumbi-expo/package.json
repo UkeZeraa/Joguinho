@@ -5,7 +5,13 @@
   "private": true,
   "scripts": {
     "start": "expo start",
-    "tunnel": "expo start --tunnel"
+    "tunnel": "expo start --tunnel",
+    "android": "expo start --android",
+    "build:apk": "eas build -p android --profile preview",
+    "build:android": "eas build -p android --profile production",
+    "build:ios": "eas build -p ios --profile production",
+    "submit:android": "eas submit -p android --latest",
+    "submit:ios": "eas submit -p ios --latest"
   },
   "dependencies": {
     "expo": "~58.0.23",
