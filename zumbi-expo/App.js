@@ -3,11 +3,16 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import JOGO_HTML from './assets/jogo';
 
 // Endereço do jogo. Por padrão usa o GitHub Pages do repositório.
 // Para testar sem publicar: na raiz do repositório rode `python3 -m http.server 8000`
 // e troque pela URL do seu computador na mesma rede Wi-Fi, ex.: 'http://192.168.0.10:8000/zumbi/'
 const GAME_URL = 'https://ukezeraa.github.io/Joguinho/zumbi/';
+
+// true  = jogo embutido no app (funciona sem internet e sem hospedagem; rode `npm run empacotar` ao mudar o jogo)
+// false = abre o jogo pela URL acima (atualiza sem gerar APK novo)
+const OFFLINE = true;
 
 export default function App() {
   const webRef = useRef(null);
@@ -33,7 +38,7 @@ export default function App() {
       ) : (
         <WebView
           ref={webRef}
-          source={{ uri: GAME_URL }}
+          source={OFFLINE ? { html: JOGO_HTML, baseUrl: 'https://apocalipsez.app/' } : { uri: GAME_URL }}
           style={styles.web}
           originWhitelist={['*']}
           javaScriptEnabled

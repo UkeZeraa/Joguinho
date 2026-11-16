@@ -1,0 +1,16 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="42%" r="70%"><stop offset="0" stop-color="#4a1410"/><stop offset="0.6" stop-color="#1c0a0a"/><stop offset="1" stop-color="#0a0505"/></radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="z" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6a4a"/><stop offset="1" stop-color="#c01c10"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#g)"/>
+  <g filter="url(#glow)">
+    <circle cx="512" cy="512" r="300" fill="none" stroke="#ff3a24" stroke-width="22" stroke-dasharray="160 40"/>
+    <circle cx="512" cy="512" r="250" fill="none" stroke="#ff8a6a" stroke-width="5" opacity="0.6"/>
+    <path d="M356 372 H668 V436 L428 652 H668 V716 H356 V652 L596 436 H356 Z" fill="url(#z)" stroke="#ffd0c0" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M512 150 V232 M512 792 V874 M150 512 H232 M792 512 H874" stroke="#ff3a24" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  
+</svg>

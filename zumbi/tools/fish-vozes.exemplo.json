@@ -1,0 +1,9 @@
+{
+  "_ajuda": "Copie este arquivo para fish-vozes.json e troque pelos IDs de modelo de voz (reference_id) da biblioteca do Fish Audio (fish.audio/discovery). Deixe vazio para usar a voz padrão.",
+  "zumbi": "",
+  "chefe": "",
+  "rainha": "",
+  "soldado": "",
+  "radio": "",
+  "ambiente": ""
+}

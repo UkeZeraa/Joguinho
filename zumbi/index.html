@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#120808">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Apocalipse Z — Raids</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -56,6 +59,8 @@
     <section id="aba-loja" class="aba">
       <h3>Caixas de armas</h3>
       <div id="caixas" class="linha"></div>
+      <h3>Oficina de acessórios</h3>
+      <div id="oficina" class="linha"></div>
       <h3>Suprimentos</h3>
       <div id="suprimentos" class="linha"></div>
       <h3>Coletes</h3>
@@ -96,7 +101,7 @@
         <button id="btnIniciar" class="btn grande">INICIAR RAID</button>
         <div class="controles">
           <b>PC:</b> WASD mover · Mouse mirar · Clique atirar · Botão direito mirar (ADS) · Shift correr ·
-          Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2 trocar arma · G granada · F kit médico · Esc pausa
+          Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2 trocar arma · G granada · F kit médico · E interagir (baús, portas, objetivos) · Y inspecionar arma · Esc pausa
           (se o mouse não ficar preso, segure o botão e arraste para olhar)<br>
           <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · 🔥 atira (segure) · ⤒ pula · 🔪 facão · » esquiva · ⚙ torreta. Jogue com o celular deitado.
         </div>
@@ -141,6 +146,10 @@
   </div>
   <div id="bossBar"><span id="bossNome">CHEFE</span><div><i id="bossFill"></i></div><div class="arm"><i id="bossArm"></i></div></div>
   <div id="anuncio"></div>
+  <div id="hudObj"></div>
+  <div id="hudEvento"></div>
+  <div id="hudInter"></div>
+  <div id="hudCanal"><span>ATIVANDO...</span><div><i id="hudCanalFill"></i></div></div>
   <div id="hudDir">
     <canvas id="minimapa"></canvas>
     <div id="hudGrana">$0</div>
@@ -172,6 +181,7 @@
     <button class="tb facao" id="btnFacao" data-acao="facao">🔪</button>
     <button class="tb esquiva" id="btnEsquiva" data-acao="esquiva">»</button>
     <button class="tb torreta" id="btnTorreta" data-acao="torreta">⚙<span>0</span></button>
+    <button class="tb interagir" id="btnInteragir" data-acao="interagir">✋</button>
   </div>
 
   <div id="pausa" class="overlay">
@@ -188,5 +198,6 @@
 
 <div id="carregando"><div class="logo"><span class="bio">☣</span><span class="nome">APOCALIPSE<b>Z</b></span></div><div class="barraCarga"><i></i></div><p>Preparando o apocalipse...</p></div>
 <script type="module" src="js/lobby.js"></script>
+<script>if ("serviceWorker" in navigator && location.protocol !== "file:" && !location.search.includes("debug")) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>

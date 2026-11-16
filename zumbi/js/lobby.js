@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import {
   TIERS, PERKS, TIPOS, CAMOS, COLETES, CONSUMIVEIS, CAIXAS, ZONAS, ZUMBIS, MODIFICADORES, PERICIAS, BOSS_PESOS,
+  SLOTS_MOD, MODS, MOD_POR_ID, EVENTOS, modCabe, slotLiberado, maestria, killsParaNivel,
   stats, barras, rolarTier, novaArma, carregar, salvar, resetar, armaPorUid, fmt,
   xpProximo, gerarMissao, zonaLiberada,
 } from './dados.js';
@@ -25,6 +26,7 @@ let filtroTier = -1;
 let zonaSel = 0;
 let raidAtual = null;
 let modo = 'raid';
+let modSlotFoco = null;     // slot de acessório aberto na tela de equipamento
 const modsSel = new Set();
 while (save.missoes.length < 3) save.missoes.push(gerarMissao(save));
 
@@ -50,7 +52,7 @@ function enquadrar(obj, cam, margem = 1.1) {
 }
 
 function miniatura(arma) {
-  const k = `${arma.tipo}|${arma.tier}|${arma.camo}`;
+  const k = `${arma.tipo}|${arma.tier}|${arma.camo}|${JSON.stringify(arma.mods || {})}|${maestria(arma).nivel}`;
   if (thumbCache.has(k)) return thumbCache.get(k);
   const m = criarArma(arma);
   const piv = new THREE.Group(); piv.add(m);
@@ -132,7 +134,7 @@ function cartaArma(a, extras = '') {
   return `<div class="carta t${a.tier} ${a.tier === 5 ? 'mitico' : ''}" style="--cor:${t.cor}" data-uid="${a.uid}">
     ${equipadaEm(a.uid) ? '<span class="eqTag">EQUIPADA</span>' : ''}
     <img src="${miniatura(a)}" alt="">
-    <div class="t">${t.nome} · ${TIPOS[a.tipo].nome}</div>
+    <div class="t">${t.nome} · ${TIPOS[a.tipo].nome} · <span style="color:#ffd86a">Nv ${maestria(a).nivel}</span>${Object.keys(a.mods || {}).length ? ' · 🔧' + Object.keys(a.mods).length : ''}</div>
     <div class="n">${a.nome}</div>${extras}</div>`;
 }
 
@@ -216,6 +218,7 @@ function renderEquip() {
     return;
   }
   const slot = slotFoco;
+  if (modSlotFoco && armaPorUid(save, armaFoco)) { renderListaMods(armaPorUid(save, armaFoco)); vitrine(armaPorUid(save, armaFoco), slot); return; }
   $('escolhaTitulo').textContent = slot === 'primaria' ? 'Armas primárias' : 'Armas secundárias';
   const compat = save.inv.filter(a => TIPOS[a.tipo].slot === slot);
   lista.innerHTML = compat.length ? compat.map(a => `<div class="item ${armaFoco === a.uid ? 'on' : ''}" data-uid="${a.uid}" style="--cor:${TIERS[a.tier].cor}">
@@ -234,7 +237,7 @@ function vitrine(a, slot) {
   const info = $('vitrineInfo');
   if (!a) { info.innerHTML = ''; mostrarPreview(null); return; }
   mostrarPreview(a);
-  const st = stats(a), br = barras(a), t = TIERS[a.tier];
+  const st = stats(a), br = barras(a), t = TIERS[a.tier], ms = maestria(a);
   const valores = {
     Dano: Math.round(st.dano) + (st.projeteis > 1 ? '×' + st.projeteis : ''),
     'Dano/seg': Math.round(st.dano * st.projeteis * st.rpm / 60),
@@ -248,16 +251,83 @@ function vitrine(a, slot) {
   info.innerHTML = `${tagTier(a.tier)} <span style="color:var(--fraco);font-size:12px">${TIPOS[a.tipo].nome} · ${st.auto ? 'Automática' : 'Semi-automática'}</span>
     <h2 style="color:${t.cor}">${a.nome}</h2>
     <div class="perks">${PERKS[a.tier].map(p => `<span>★ ${p}</span>`).join('') || '<span>Sem vantagens</span>'}</div>
+    <div class="maestria"><div><b>Maestria Nv ${ms.nivel}</b> <span>${ms.titulo}</span><small>${ms.nivel >= 10 ? 'MÁXIMA' : `${ms.kills}/${ms.fim} abates`}</small></div>
+      <div class="b"><i style="width:${ms.prog * 100}%"></i></div>
+      <small>+${(ms.nivel - 1) * 2}% dano · +${ms.nivel - 1}% cadência · recarga −${((ms.nivel - 1) * 1.5).toFixed(1)}%</small></div>
     <div class="barras">${Object.keys(br).map(k => `<span>${k}</span><div class="b"><i style="width:${br[k] * 100}%;background:linear-gradient(90deg,#666,${t.cor})"></i></div><span class="v">${valores[k]}</span>`).join('')}</div>
+    <div class="modSlots">${SLOTS_MOD.map(sl => {
+      const lib = slotLiberado(a, sl.id), id = a.mods && a.mods[sl.id], m = id && MOD_POR_ID[id];
+      return `<button class="modSlot ${lib ? '' : 'bloq'} ${modSlotFoco === sl.id ? 'foco' : ''}" data-mslot="${sl.id}" ${m ? `style="--cor:${TIERS[m.tier].cor}"` : ''}>
+        <i>${sl.icone}</i><span>${sl.nome}</span><b>${lib ? (m ? m.nome : 'Vazio') : '🔒 Maestria ' + sl.nivel}</b></button>`;
+    }).join('')}</div>
     <div class="camoSel">${CAMOS.map(c => `<button title="${c.nome}${save.camos.includes(c.id) ? '' : ' (compre na Loja)'}" data-camo="${c.id}" class="${a.camo === c.id ? 'on' : ''} ${save.camos.includes(c.id) ? '' : 'bloq'}" style="background:${c.cor}"></button>`).join('')}</div>
     <div style="margin-top:12px;display:flex;gap:8px">
       <button class="btn verde" id="btnEquipar" ${equipada ? 'disabled' : ''}>${equipada ? 'Equipada' : 'Equipar'}</button>
     </div>`;
+  info.querySelectorAll('[data-mslot]').forEach(b => b.addEventListener('click', () => {
+    const sl = b.dataset.mslot;
+    if (!slotLiberado(a, sl)) return aviso(`Slot liberado na Maestria ${SLOTS_MOD.find(x => x.id === sl).nivel} (mate zumbis com esta arma)`);
+    modSlotFoco = modSlotFoco === sl ? null : sl; som.clique(); renderEquip();
+  }));
   info.querySelectorAll('[data-camo]').forEach(b => b.addEventListener('click', () => {
     if (!save.camos.includes(b.dataset.camo)) return aviso('Compre esta camuflagem na Loja');
     a.camo = b.dataset.camo; som.clique(); renderEquip();
   }));
   $('btnEquipar').addEventListener('click', () => { save.equip[slot] = a.uid; som.pegar(); renderEquip(); });
+}
+
+const ROT_STAT = { dano: 'Dano', rpm: 'Cadência', pente: 'Pente', recarga: 'Recarga', disp: 'Dispersão', alcance: 'Alcance', recuo: 'Recuo', zoom: 'Zoom' };
+function deltaMod(a, slotId, modId) {
+  const antes = stats(a), depois = stats(a, { [slotId]: modId });
+  const linhas = [];
+  for (const k of ['dano', 'rpm', 'pente', 'alcance', 'recuo', 'disp', 'recarga']) {
+    if (!antes[k]) continue;
+    const d = (depois[k] / antes[k] - 1) * 100;
+    if (Math.abs(d) < 0.5) continue;
+    const bom = (k === 'recarga' || k === 'disp' || k === 'recuo') ? d < 0 : d > 0;
+    linhas.push(`<span class="${bom ? 'bom' : 'ruim'}">${d > 0 ? '+' : ''}${Math.round(d)}% ${ROT_STAT[k]}</span>`);
+  }
+  if (depois.zoom !== antes.zoom) linhas.push(`<span class="bom">+${(depois.zoom - antes.zoom).toFixed(1)}× Zoom</span>`);
+  for (const [k, nome] of [['fogo', 'Incendiária'], ['explosivo', 'Explosiva'], ['eletrico', 'Elétrica'], ['silencioso', 'Silenciosa'], ['termico', 'Térmica']]) if (depois[k] && !antes[k]) linhas.push(`<span class="bom">${nome}</span>`);
+  if (depois.perfura > antes.perfura) linhas.push('<span class="bom">+Perfura</span>');
+  if (depois.vampiro > antes.vampiro) linhas.push('<span class="bom">+Roubo de vida</span>');
+  return linhas.join('');
+}
+function instalarMod(a, slotId, modId) {
+  const antigo = a.mods && a.mods[slotId];
+  if (antigo) save.mods[antigo] = (save.mods[antigo] || 0) + 1;
+  a.mods = { ...(a.mods || {}) };
+  if (modId) { save.mods[modId]--; if (save.mods[modId] <= 0) delete save.mods[modId]; a.mods[slotId] = modId; }
+  else delete a.mods[slotId];
+}
+function renderListaMods(a) {
+  const sl = SLOTS_MOD.find(x => x.id === modSlotFoco);
+  $('escolhaTitulo').textContent = `Acessórios · ${sl.nome}`;
+  const lista = $('escolhaLista');
+  const atual = a.mods && a.mods[sl.id];
+  const dono = MODS.filter(m => m.slot === sl.id && modCabe(m, a));
+  const linha = m => {
+    const tem = save.mods[m.id] || 0, inst = atual === m.id;
+    return `<div class="item modItem ${inst ? 'on' : ''}" data-mod="${m.id}" style="--cor:${TIERS[m.tier].cor}">
+      <div style="flex:1"><div class="t">${TIERS[m.tier].nome}${tem ? ` · você tem ×${tem}` : ''}</div><div class="n">${m.nome}</div>
+      <div class="desc">${m.desc}</div><div class="delta">${deltaMod(a, sl.id, m.id)}</div></div>
+      ${inst ? '<span class="eq">INSTALADO</span>' : tem ? '<span class="eq" style="color:#7dff8e">INSTALAR</span>' : m.preco ? `<span class="eq" style="color:#fd6">COMPRAR ${fmt(m.preco)}</span>` : '<span class="eq" style="color:#888">SÓ EM BAÚS</span>'}</div>`;
+  };
+  lista.innerHTML = `<button class="btn mini" id="btnVoltarArmas">← Voltar às armas</button>` +
+    (atual ? `<div class="item modItem" data-remover="1" style="--cor:#a33"><div><div class="n">Remover ${MOD_POR_ID[atual].nome}</div><div class="desc">Volta para o inventário</div></div></div>` : '') +
+    (dono.length ? dono.map(linha).join('') : '<p style="color:var(--fraco);font-size:13px">Nenhum acessório compatível.</p>');
+  $('btnVoltarArmas').addEventListener('click', () => { modSlotFoco = null; som.clique(); renderEquip(); });
+  lista.querySelectorAll('[data-mod]').forEach(el => el.addEventListener('click', () => {
+    const m = MOD_POR_ID[el.dataset.mod];
+    if (atual === m.id) return;
+    if (!(save.mods[m.id] > 0)) {
+      if (!m.preco) return aviso('Este acessório só aparece em baús, elites e chefes');
+      if (save.grana < m.preco) return aviso('Grana insuficiente');
+      save.grana -= m.preco; save.mods[m.id] = (save.mods[m.id] || 0) + 1;
+    }
+    instalarMod(a, sl.id, m.id); som.pegar(); renderEquip();
+  }));
+  lista.querySelectorAll('[data-remover]').forEach(el => el.addEventListener('click', () => { instalarMod(a, sl.id, null); som.clique(); renderEquip(); }));
 }
 
 function comprarConsumivel(id) {
@@ -302,6 +372,19 @@ function renderLoja() {
   }).join('');
   $('caixas').querySelectorAll('[data-caixa]').forEach(b => b.addEventListener('click', () => abrirCaixa(CAIXAS.find(c => c.id === b.dataset.caixa))));
 
+  const slotsIc = Object.fromEntries(SLOTS_MOD.map(s => [s.id, s]));
+  $('oficina').innerHTML = MODS.map(m => {
+    const tem = save.mods[m.id] || 0;
+    return `<div class="loja mod" style="--cor:${TIERS[m.tier].cor}"><div class="t" style="color:${TIERS[m.tier].cor}">${slotsIc[m.slot].icone} ${slotsIc[m.slot].nome} · ${TIERS[m.tier].nome}</div><h4>${m.nome}</h4>
+      <div style="font-size:12px;color:var(--fraco);min-height:48px">${m.desc}</div>
+      ${m.preco ? `<button class="btn mini" data-mcomprar="${m.id}">Comprar · <span class="preco">${fmt(m.preco)}</span></button>` : '<small style="color:#888">Só em baús, elites e chefes</small>'}
+      ${tem ? `<small style="display:block;color:#7dff8e;margin-top:4px">No inventário: ×${tem}</small>` : ''}</div>`;
+  }).join('');
+  $('oficina').querySelectorAll('[data-mcomprar]').forEach(b => b.addEventListener('click', () => {
+    const m = MOD_POR_ID[b.dataset.mcomprar];
+    if (save.grana < m.preco) return aviso('Grana insuficiente');
+    save.grana -= m.preco; save.mods[m.id] = (save.mods[m.id] || 0) + 1; som.pegar(); render();
+  }));
   $('suprimentos').innerHTML = Object.entries(CONSUMIVEIS).map(([id, c]) => `<div class="loja"><h4>${c.icone} ${c.nome}</h4>
     <div style="font-size:12px;color:var(--fraco)">${c.desc} Você tem ${save[id] || 0}/${c.max}.</div>
     <button class="btn" data-sup="${id}" ${save[id] >= c.max ? 'disabled' : ''}>Comprar · <span class="preco">${fmt(c.preco)}</span></button></div>`).join('');
@@ -390,8 +473,10 @@ function renderRaid() {
     return `<div class="zona ${zonaSel === i ? 'on' : ''} ${lib ? '' : 'bloq'}" data-z="${i}">
       <div class="img" style="background:linear-gradient(180deg, ${cor}, #000), radial-gradient(circle at 70% 30%, ${luz}55, transparent 50%);background-blend-mode:screen"></div>
       <h4>${lib ? '' : '🔒 '}${z.nome}</h4><div class="dif">${'☠'.repeat(Math.round(z.dif * 1.5))} · ${z.ondas} ondas · recompensa ×${z.recompensa}</div>
+      <div class="zinfo" style="color:${save.nivel >= z.nivelRec ? '#7dff8e' : '#ff9a70'}">Nível recomendado: ${z.nivelRec}${save.nivel < z.nivelRec ? ' (você está no ' + save.nivel + ': vai ser difícil!)' : ' ✔'}</div>
       <p>${lib ? z.descricao : `Extraia de <b>${req.nome}</b> para liberar.`}</p>
       <p style="margin-top:4px">Chefe: <b style="color:#ff7090">${z.chefes.map(c => ZUMBIS[c].nome).join(' + ')}</b></p>
+      <p class="zinfo">🗺 Mapa ${z.tam * 2}×${z.tam * 2} m · ◆ ${z.objetivo.nome} (${z.objetivo.qtd}) → <b>${z.objetivo.cofre}</b><br>⚡ Eventos: ${z.eventos.map(e => EVENTOS[e].nome).join(', ')}</p>
       <div class="chances" style="margin-top:8px">${z.loot.map((p, k) => `<i style="width:${p / tot * 100}%;background:${TIERS[k].cor}"></i>`).join('')}</div>
       <div class="chancesTxt">Loot · chance de Mítico ${(z.loot[5] / tot * 100).toFixed(z.loot[5] / tot < 0.01 ? 2 : 0)}%</div></div>`;
   }).join('');
@@ -581,6 +666,17 @@ function fimRaid(r) {
   const subiu = ganharXp(xpGanho);
   progressoMissoes(r);
   const prontas = save.missoes.filter(m => m.progresso >= m.qtd).length;
+  // maestria das armas usadas e acessórios encontrados
+  const subidas = [];
+  for (const k of r.kills || []) {
+    const w = armaPorUid(save, k.uid);
+    if (!w || !k.kills) continue;
+    const antes = maestria(w).nivel;
+    w.kills = (w.kills || 0) + k.kills;
+    const depois = maestria(w).nivel;
+    if (depois > antes) subidas.push({ nome: w.nome, nivel: depois, slot: SLOTS_MOD.find(s => s.nivel > antes && s.nivel <= depois) });
+  }
+  for (const id of r.acessorios || []) save.mods[id] = (save.mods[id] || 0) + 1;
   let vendidas = 0;
   for (const a of r.armas) {
     if (save.inv.length < MAX_INV) save.inv.push(a);
@@ -596,6 +692,9 @@ function fimRaid(r) {
     ${r.placar.chefes.length ? `Chefes derrotados: <b style="color:#ff7090">${r.placar.chefes.map(c => ZUMBIS[c].nome).join(', ')}</b><br>` : ''}
     ${zonaNova ? `<b style="color:#40ff80">🔓 NOVA ZONA LIBERADA: ${zonaNova.nome}!</b><br>` : ''}
     ${prontas ? `<b style="color:#7dff8e">✔ ${prontas} missão(ões) pronta(s) para resgatar!</b><br>` : ''}
+    ${r.objetivo && r.objetivo.total ? `Objetivo (${r.objetivo.nome}): <b style="color:${r.objetivo.completo ? '#7dff8e' : '#ffd86a'}">${r.objetivo.feitos}/${r.objetivo.total}${r.objetivo.completo ? ' · cofre liberado!' : ''}</b><br>` : ''}
+    ${subidas.map(x => `<b style="color:#ffd86a">⬆ ${x.nome} subiu para Maestria ${x.nivel}${x.slot ? ` — slot de ${x.slot.nome} liberado!` : ''}</b><br>`).join('')}
+    ${(r.acessorios || []).length ? `Acessórios recuperados: <b>${r.acessorios.map(id => MOD_POR_ID[id].nome).join(', ')}</b><br>` : (r.modsPerdidos || []).length ? `<span style="color:#ff8080">${r.modsPerdidos.length} acessório(s) perdido(s).</span><br>` : ''}
     Grana: <b style="color:#7dff8e">+${fmt(r.ganho)}</b>${r.bonus ? ` (inclui bônus de extração ${fmt(r.bonus)})` : ' (morto: só 30% da grana foi salva)'}<br>
     ${r.extraido ? (r.armas.length ? `Armas recuperadas: <b>${r.armas.length}</b>${vendidas ? ` (${vendidas} vendidas, arsenal cheio)` : ''}` : 'Nenhuma arma encontrada.')
       : (r.perdidas.length ? `<span style="color:#ff8080">${r.perdidas.length} arma(s) da mochila foram perdidas.</span>` : '')}`;
