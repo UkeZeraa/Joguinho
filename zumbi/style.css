@@ -501,3 +501,4 @@ body.mobile #hudInter { top: 56%; font-size: 15px; }
 body.mobile .cartaM { width: 150px; min-height: 170px; padding: 10px 8px; } body.mobile .cartaM i { font-size: 30px; } body.mobile .cartaM b { font-size: 15px; } body.mobile #cartas h2 { font-size: 20px; }
 .diarioBox { border: 1px solid #8a6a2a; background: rgba(255,216,106,.06); border-radius: 4px; padding: 10px 12px; margin: 8px 0; font-size: 13px; line-height: 1.5; }
 .diarioBox b { color: #ffd86a; }
+#raid > #cartas { pointer-events: auto !important; z-index: 40; }
