@@ -243,6 +243,41 @@ export const ZUMBIS = {
 
 export const BOSS_PESOS = [0, 0, 0, 60, 32, 8];
 
+// ---------- cartas de melhoria (escolha 1 de 3 ao limpar uma onda; valem até o fim da raid) ----------
+export const CARTAS = [
+  { id: 'dano', nome: 'Munição Pesada', icone: '💥', desc: '+20% de dano em todas as armas' },
+  { id: 'rpm', nome: 'Gatilho Nervoso', icone: '⚡', desc: '+15% de cadência' },
+  { id: 'recarga', nome: 'Mãos de Mágico', icone: '⟳', desc: 'Recarga 25% mais rápida' },
+  { id: 'pente', nome: 'Bolsos Fundos', icone: '▮', desc: '+30% de balas no pente e munição reserva cheia' },
+  { id: 'vel', nome: 'Adrenalina', icone: '👟', desc: '+12% de velocidade' },
+  { id: 'vida', nome: 'Pele Grossa', icone: '❤', desc: '+30 de vida máxima e cura total' },
+  { id: 'armadura', nome: 'Placas Extras', icone: '🛡', desc: '+50 de armadura' },
+  { id: 'crit', nome: 'Olho Clínico', icone: '🎯', desc: '+30% de dano de headshot' },
+  { id: 'vampiro', nome: 'Sanguessuga', icone: '🩸', desc: 'Rouba 3% do dano como vida' },
+  { id: 'grana', nome: 'Saqueador', icone: '💰', desc: '+40% de grana dos abates' },
+  { id: 'granadas', nome: 'Granadeiro', icone: '💣', desc: '+2 granadas' },
+  { id: 'kits', nome: 'Paramédico', icone: '✚', desc: '+2 kits médicos' },
+  { id: 'torreta', nome: 'Engenheiro', icone: '⚙', desc: '+1 torreta sentinela' },
+  { id: 'fogo', nome: 'Balas em Brasa', icone: '🔥', desc: 'Todas as armas incendeiam os zumbis' },
+  { id: 'perfura', nome: 'Núcleo de Tungstênio', icone: '➤', desc: 'Os tiros atravessam +1 zumbi' },
+];
+
+// ---------- desafio diário: mesma raid para todo mundo no dia (zona, modificadores e armas fixos) ----------
+function semente(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rngDe(seed) { let a = seed; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+export function hojeStr(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+export function desafioDiario(data = hojeStr()) {
+  const r = rngDe(semente('apocalipse-z-' + data));
+  const pega = a => a[Math.floor(r() * a.length)];
+  const zonaIdx = Math.floor(r() * ZONAS.length);
+  const mods = [...MODIFICADORES].sort(() => r() - 0.5).slice(0, 1 + Math.floor(r() * 2)).map(m => m.id);
+  const tier = Math.min(4, 1 + Math.floor(ZONAS[zonaIdx].dif) + (r() < 0.4 ? 1 : 0));
+  const prim = { tipo: pega(['fuzil', 'escopeta', 'sniper', 'metralhadora']), tier };
+  const sec = { tipo: pega(['pistola', 'submetralhadora']), tier: Math.max(1, tier - 1) };
+  return { data, zonaIdx, mods, armas: [prim, sec] };
+}
+export function pontosDiario(r) { return r.abates * 10 + (r.onda || 0) * 100 + (r.extraido ? 1000 : 0) + (r.objetivo && r.objetivo.completo ? 500 : 0); }
+
 // ---------- perícias (árvore de habilidades) ----------
 export const PERICIAS = [
   { id: 'vida', nome: 'Vigor', icone: '❤', max: 5, desc: '+15 de vida máxima por nível' },

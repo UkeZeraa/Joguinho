@@ -4,7 +4,7 @@ import {
   TIERS, PERKS, TIPOS, CAMOS, COLETES, CONSUMIVEIS, CAIXAS, ZONAS, ZUMBIS, MODIFICADORES, PERICIAS, BOSS_PESOS,
   SLOTS_MOD, MODS, MOD_POR_ID, EVENTOS, modCabe, slotLiberado, maestria, killsParaNivel,
   stats, barras, rolarTier, novaArma, carregar, salvar, resetar, armaPorUid, fmt,
-  xpProximo, gerarMissao, zonaLiberada,
+  xpProximo, gerarMissao, zonaLiberada, CARTAS, desafioDiario, hojeStr, pontosDiario,
 } from './dados.js';
 import { criarArma, criarZumbi } from './modelos.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -26,6 +26,7 @@ let filtroTier = -1;
 let zonaSel = 0;
 let raidAtual = null;
 let modo = 'raid';
+let raidDiaria = null;      // desafio diário em andamento
 let modSlotFoco = null;     // slot de acessório aberto na tela de equipamento
 const modsSel = new Set();
 while (save.missoes.length < 3) save.missoes.push(gerarMissao(save));
@@ -461,9 +462,25 @@ function renderRaid() {
   $('modos').innerHTML = [
     ['raid', 'Raid', 'Ondas fixas, chefe no final e extração'],
     ['sobrevivencia', 'Sobrevivência', `Ondas infinitas · recorde: onda ${save.stats.melhorSobrevivencia || 0}`],
+    ['diario', 'Desafio diário', save.diario && save.diario.data === hojeStr() ? `Recorde de hoje: ${save.diario.melhor} pts` : 'Zona, armas e modificadores do dia'],
   ].map(([id, nome, d]) => `<button data-modo="${id}" class="${modo === id ? 'on' : ''}">${nome}<small>${d}</small></button>`).join('');
   $('modos').querySelectorAll('[data-modo]').forEach(b => b.addEventListener('click', () => { modo = b.dataset.modo; som.clique(); renderRaid(); }));
 
+  if (modo === 'diario') {
+    const d = desafioDiario(), z = ZONAS[d.zonaIdx], feito = save.diario && save.diario.data === d.data;
+    $('zonas').innerHTML = `<div class="diarioBox" style="flex:1">
+      <b>DESAFIO DE ${d.data.split('-').reverse().join('/')}</b> — igual para todo mundo hoje.<br>
+      Zona: <b>${z.nome}</b> (${z.ondas} ondas, chefe ${z.chefes.map(c => ZUMBIS[c].nome).join(' + ')})<br>
+      Modificadores: <b>${d.mods.map(id => MODIFICADORES.find(m => m.id === id).nome).join(' + ')}</b><br>
+      Armas fornecidas: <b>${d.armas.map(a => `${TIPOS[a.tipo].nome} ${TIERS[a.tier].nome}`).join(' + ')}</b> · Colete Tático · 2 granadas · 2 kits · 1 torreta<br>
+      Seus itens não são gastos. O loot que você extrair é seu. Pontos = abates ×10 + ondas ×100 + extração 1000 + objetivo 500.<br>
+      ${feito ? `Recorde de hoje: <b>${save.diario.melhor} pts</b>${save.diario.premio ? ' · prêmio do dia já recebido ✔' : ''}` : 'Primeira extração do dia: <b>+$1.500 e 1 acessório</b>.'}</div>`;
+    $('mods').innerHTML = '';
+    const s0 = save.stats;
+    $('resumoLoadout').innerHTML = '';
+    $('estatisticas').innerHTML = `Raids: ${s0.raids} · Extrações: ${s0.extracoes} · Mortes: ${s0.mortes} · Zumbis abatidos: ${s0.abates}`;
+    return;
+  }
   if (!zonaLiberada(save, ZONAS[zonaSel])) zonaSel = 0;
   $('zonas').innerHTML = ZONAS.map((z, i) => {
     const cor = '#' + z.neblina.toString(16).padStart(6, '0'), luz = '#' + z.luz.toString(16).padStart(6, '0');
@@ -627,13 +644,20 @@ function renderBestiario() {
 
 $('btnIniciar').addEventListener('click', () => {
   iniciarAudio();
-  const prim = armaPorUid(save, save.equip.primaria), sec = armaPorUid(save, save.equip.secundaria);
-  if (!prim && !sec) return aviso('Equipe pelo menos uma arma!');
-  const zona = ZONAS[zonaSel];
-  const col = COLETES.find(c => c.id === save.colete);
-  const loadout = { armas: [prim, sec], armadura: col.armadura, granadas: save.granadas, kits: save.kits, torretas: save.torretas || 0, pericias: save.pericias };
-  // consumíveis vão para a raid
-  save.granadas = 0; save.kits = 0; save.torretas = 0;
+  let prim = armaPorUid(save, save.equip.primaria), sec = armaPorUid(save, save.equip.secundaria);
+  let zona = ZONAS[zonaSel], modoRaid = modo, modsRaid = [...modsSel], loadout;
+  raidDiaria = null;
+  if (modo === 'diario') {
+    const d = desafioDiario();
+    raidDiaria = d; zona = ZONAS[d.zonaIdx]; modoRaid = 'raid'; modsRaid = d.mods;
+    loadout = { armas: d.armas.map(a => novaArma(a.tipo, a.tier)), armadura: 60, granadas: 2, kits: 2, torretas: 1, pericias: save.pericias };
+  } else {
+    if (!prim && !sec) return aviso('Equipe pelo menos uma arma!');
+    const col = COLETES.find(c => c.id === save.colete);
+    loadout = { armas: [prim, sec], armadura: col.armadura, granadas: save.granadas, kits: save.kits, torretas: save.torretas || 0, pericias: save.pericias };
+    // consumíveis vão para a raid
+    save.granadas = 0; save.kits = 0; save.torretas = 0;
+  }
   save.stats.raids++;
   gravar();
   $('lobby').style.display = 'none';
@@ -641,14 +665,27 @@ $('btnIniciar').addEventListener('click', () => {
   if (mobile && document.documentElement.requestFullscreen && !document.fullscreenElement) {
     document.documentElement.requestFullscreen().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
   }
-  raidAtual = iniciarRaid({ canvas: $('jogo'), zona, loadout, opcoes: save.opcoes, mobile, onFim: fimRaid, modo, mods: [...modsSel] });
+  raidAtual = iniciarRaid({ canvas: $('jogo'), zona, loadout, opcoes: save.opcoes, mobile, onFim: fimRaid, modo: modoRaid, mods: modsRaid });
 });
 
 function fimRaid(r) {
   raidAtual = null;
-  save.granadas = Math.min(CONSUMIVEIS.granadas.max, r.granadas);
-  save.kits = Math.min(CONSUMIVEIS.kits.max, r.kits);
-  save.torretas = Math.min(CONSUMIVEIS.torretas.max, r.torretas);
+  const diaria = raidDiaria; raidDiaria = null;
+  let txtDiario = '';
+  if (!diaria) {
+    save.granadas = Math.min(CONSUMIVEIS.granadas.max, r.granadas);
+    save.kits = Math.min(CONSUMIVEIS.kits.max, r.kits);
+    save.torretas = Math.min(CONSUMIVEIS.torretas.max, r.torretas);
+  } else {
+    const pts = pontosDiario(r);
+    const antes = save.diario && save.diario.data === diaria.data ? save.diario : { data: diaria.data, melhor: 0, premio: false };
+    const recorde = pts > antes.melhor;
+    let premio = '';
+    if (r.extraido && !antes.premio) { antes.premio = true; save.grana += 1500; const lista = MODS.filter(m => m.tier >= 2); const m = lista[Math.floor(Math.random() * lista.length)]; save.mods[m.id] = (save.mods[m.id] || 0) + 1; premio = ` · Prêmio do dia: <b style="color:#7dff8e">+$1.500 e ${m.nome}</b>`; }
+    antes.melhor = Math.max(antes.melhor, pts);
+    save.diario = antes;
+    txtDiario = `<b style="color:#ffd86a">Desafio diário: ${pts} pontos${recorde ? ' — NOVO RECORDE DO DIA!' : ` (recorde: ${antes.melhor})`}</b>${premio}<br>`;
+  }
   save.grana += r.ganho;
   save.stats.abates += r.abates;
   save.stats.headshots = (save.stats.headshots || 0) + r.placar.headshots;
@@ -658,7 +695,7 @@ function fimRaid(r) {
   if (r.modo === 'sobrevivencia') save.stats.melhorSobrevivencia = Math.max(save.stats.melhorSobrevivencia || 0, r.onda);
   if (r.extraido) save.stats.extracoes++; else save.stats.mortes++;
   let zonaNova = null;
-  if (r.extraido && r.modo === 'raid' && !save.zonasExtraidas.includes(r.zonaId)) {
+  if (r.extraido && r.modo === 'raid' && !diaria && !save.zonasExtraidas.includes(r.zonaId)) {
     save.zonasExtraidas.push(r.zonaId);
     zonaNova = ZONAS.find(z => z.requer === r.zonaId);
   }
@@ -692,6 +729,7 @@ function fimRaid(r) {
     ${r.placar.chefes.length ? `Chefes derrotados: <b style="color:#ff7090">${r.placar.chefes.map(c => ZUMBIS[c].nome).join(', ')}</b><br>` : ''}
     ${zonaNova ? `<b style="color:#40ff80">🔓 NOVA ZONA LIBERADA: ${zonaNova.nome}!</b><br>` : ''}
     ${prontas ? `<b style="color:#7dff8e">✔ ${prontas} missão(ões) pronta(s) para resgatar!</b><br>` : ''}
+    ${txtDiario}${(r.cartas || []).length ? `Melhorias usadas: <b>${r.cartas.map(id => CARTAS.find(c => c.id === id).nome).join(', ')}</b><br>` : ''}
     ${r.objetivo && r.objetivo.total ? `Objetivo (${r.objetivo.nome}): <b style="color:${r.objetivo.completo ? '#7dff8e' : '#ffd86a'}">${r.objetivo.feitos}/${r.objetivo.total}${r.objetivo.completo ? ' · cofre liberado!' : ''}</b><br>` : ''}
     ${subidas.map(x => `<b style="color:#ffd86a">⬆ ${x.nome} subiu para Maestria ${x.nivel}${x.slot ? ` — slot de ${x.slot.nome} liberado!` : ''}</b><br>`).join('')}
     ${(r.acessorios || []).length ? `Acessórios recuperados: <b>${r.acessorios.map(id => MOD_POR_ID[id].nome).join(', ')}</b><br>` : (r.modsPerdidos || []).length ? `<span style="color:#ff8080">${r.modsPerdidos.length} acessório(s) perdido(s).</span><br>` : ''}

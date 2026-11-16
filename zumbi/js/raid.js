@@ -1,6 +1,6 @@
 // Raid em primeira pessoa: mapa, jogador, armas, zumbis, ondas e extração.
 import * as THREE from 'three';
-import { TIPOS, TIERS, ZUMBIS, BOSS_PESOS, MODIFICADORES, EVENTOS, MODS, MOD_POR_ID, stats, rolarTier, novaArma, fmt } from './dados.js';
+import { TIPOS, TIERS, ZUMBIS, BOSS_PESOS, MODIFICADORES, EVENTOS, CARTAS, MODS, MOD_POR_ID, stats, rolarTier, novaArma, fmt } from './dados.js';
 import { criarArma, criarZumbi, criarFacao, criarTorreta, texCaixa, texBrilho, mesclar } from './modelos.js';
 import { montarCenario } from './cenarios.js';
 import { modeloBau } from './cen_util.js';
@@ -717,6 +717,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   armas[0].mesh.visible = true;
   let cadencia = 0, recarregando = 0, trocando = 0, recuoV = 0, chute = 0, disparoSolto = true, abrirFogo = 0;
   let mira = 0; // 0..1 (ADS)
+  const bonus = { vel: 1, crit: 1, grana: 1 };   // cartas de melhoria escolhidas nesta raid
+  const cartasPegas = [];
+  let escolhendo = false;
   let inspec = 0, swayY = 0, swayP = 0, lean = 0, flinch = 0, ultYaw = 0, ultPitch = 0;
   let tremor = 0, flashDano = 0, hitmarker = 0, hitCabeca = false;
   const muzzleSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: reg(texBrilho()), color: 0xffd090, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -1022,7 +1025,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     if (origem === 'faca') placar.facao++;
     if (z.elite) placar.elite++;
     placar.xp += Math.round((z.def.grana * 1.5 + 5) * (z.elite ? 3 : 1));
-    const g = Math.round(z.def.grana * recompensa * (cabeca ? 1.5 : 1) * (z.elite ? 3 : 1));
+    const g = Math.round(z.def.grana * recompensa * (cabeca ? 1.5 : 1) * (z.elite ? 3 : 1) * bonus.grana);
     ganho += g;
     som.abate();
     if (Math.random() < 0.3) som.zumbiMorte(Math.hypot(z.x - jog.x, z.z - jog.z), 0);
@@ -1182,7 +1185,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     for (let i = 0; i < hits.length && i < maxHits; i++) {
       const h = hits[i], z = h.z;
       const px = o.x + d.x * h.t, py = o.y + d.y * h.t, pz = o.z + d.z * h.t;
-      const multCab = (a.def.tipo === 'sniper' ? 2.5 : 2) * (1 + 0.12 * nv('critico'));
+      const multCab = (a.def.tipo === 'sniper' ? 2.5 : 2) * (1 + 0.12 * nv('critico')) * bonus.crit;
       let dano = st.dano * (h.t > st.alcance ? 0.55 : 1) * (h.cabeca ? multCab : 1) * (i > 0 ? 0.7 : 1);
       if (z.def.boss && h.cabeca) dano *= 0.75;
       z.ultimaArma = a;
@@ -1627,6 +1630,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   function terminar(extraido) {
     if (acabou) return;
     acabou = true;
+    $('cartas').style.display = 'none';
     cancelAnimationFrame(raf);
     removerInput();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -1639,6 +1643,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       perdidas: extraido ? [] : armasAchadas,
       acessorios: extraido ? modsAchados : [], modsPerdidos: extraido ? [] : modsAchados,
       kills: armas.map(a => ({ uid: a.def.uid, kills: a.kills })),
+      cartas: cartasPegas,
       objetivo: { completo: objCompleto, feitos: objFeitos, total: objTotal, nome: zona.objetivo ? zona.objetivo.nome : '' },
       granadas: jog.granadas, kits: jog.kits, torretas: jog.torretas,
       placar, xp: placar.xp + (extraido ? Math.round(200 * recompensa) : 0),
@@ -1698,7 +1703,8 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     if (e.code === 'KeyY' && !gatilho && mira < 0.1 && !recarregando && !jog.morto) inspec = 2.6;
     if (e.code === 'KeyC' || e.code === 'ControlLeft' || e.code === 'AltLeft') { e.preventDefault(); esquivar(); }
     if (e.code === 'KeyT') colocarTorreta();
-    if (e.code === 'KeyP') pausar(!pausado);
+    if (e.code === 'KeyP' && !escolhendo) pausar(!pausado);
+    if (escolhendo && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) { const b = $('cartasLista').children[+e.code.slice(5) - 1]; if (b) b.click(); }
   };
   const onKeyUp = e => { teclas[e.code] = false; };
   let arrastoMouse = false;
@@ -1720,7 +1726,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   };
   const onWheel = e => { if (!pausado) trocarArma(); };
   const onLockChange = () => {
-    if (!mobile && !acabou && document.pointerLockElement !== canvas && !pausado) pausar(true);
+    if (!mobile && !acabou && document.pointerLockElement !== canvas && !pausado && !escolhendo) pausar(true);
   };
   const onCtx = e => e.preventDefault();
 
@@ -2039,6 +2045,52 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     atualizarFontes(dt);
   }
 
+  // ---------- cartas de melhoria entre ondas ----------
+  function aplicarCarta(id) {
+    const todas = f => armas.forEach(a => f(a.st, a));
+    if (id === 'dano') todas(st => { st.dano *= 1.2; });
+    if (id === 'rpm') todas(st => { st.rpm *= 1.15; });
+    if (id === 'recarga') todas(st => { st.recarga *= 0.75; });
+    if (id === 'pente') todas((st, a) => { st.pente = Math.round(st.pente * 1.3); a.reservaMax = st.pente * 7; a.reserva = a.reservaMax; a.pente = st.pente; });
+    if (id === 'vel') bonus.vel *= 1.12;
+    if (id === 'vida') { jog.hpMax += 30; jog.hp = jog.hpMax; }
+    if (id === 'armadura') { jog.armadura += 50; jog.armaduraMax = Math.max(jog.armaduraMax, jog.armadura); }
+    if (id === 'crit') bonus.crit *= 1.3;
+    if (id === 'vampiro') todas(st => { st.vampiro += 0.03; });
+    if (id === 'grana') bonus.grana *= 1.4;
+    if (id === 'granadas') jog.granadas += 2;
+    if (id === 'kits') jog.kits += 2;
+    if (id === 'torreta') jog.torretas += 1;
+    if (id === 'fogo') todas(st => { st.fogo = true; });
+    if (id === 'perfura') todas(st => { st.perfura += 1; });
+    cartasPegas.push(id);
+    atualizarHudVida(); atualizarHudItens(); atualizarHudArma();
+  }
+  function oferecerCartas() {
+    if (jog.morto || acabou) return;
+    const unicas = new Set(['fogo']);
+    const pool = CARTAS.filter(c => !(unicas.has(c.id) && cartasPegas.includes(c.id)) && !(c.id === 'fogo' && armas.every(a => a.st.fogo)));
+    const op = [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+    escolhendo = true;
+    gatilho = false; mirando = false;
+    for (const k in teclas) teclas[k] = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    $('cartasLista').innerHTML = op.map((c, i) => `<button class="cartaM" data-carta="${c.id}"><i>${c.icone}</i><b>${c.nome}</b><span>${c.desc}</span><small>${mobile ? 'toque' : 'tecla ' + (i + 1)}</small></button>`).join('');
+    $('cartas').style.display = 'flex';
+    som.raro();
+    $('cartasLista').querySelectorAll('[data-carta]').forEach(b => b.addEventListener('click', () => {
+      if (!escolhendo) return;
+      aplicarCarta(b.dataset.carta);
+      const c = CARTAS.find(x => x.id === b.dataset.carta);
+      feed(`Melhoria: ${c.nome}`, '#ffd86a');
+      escolhendo = false;
+      $('cartas').style.display = 'none';
+      som.pegar();
+      ultimo = performance.now();
+      if (!mobile) canvas.requestPointerLock?.();
+    }));
+  }
+
   // ---------- loop ----------
   const vecProj = new THREE.Vector3();
   let ultimo = performance.now();
@@ -2047,7 +2099,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     let dt = (agora - ultimo) / 1000;
     ultimo = agora;
     if (dt > 0.05) dt = 0.05;
-    if (!pausado) atualizar(dt);
+    if (!pausado && !escolhendo) atualizar(dt);
     desenhar(dt);
   }
 
@@ -2067,7 +2119,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     const mag = Math.hypot(f, s);
     if (mag > 1) { f /= mag; s /= mag; }
     correndo = (teclas.ShiftLeft || teclas.ShiftRight || (mobile && Math.hypot(joy.dx, joy.dy) > 0.95)) && f > 0.5 && !gatilho && mira < 0.2;
-    let vel = 5.2 * st.lenta * (correndo ? 1.45 : 1) * (1 - mira * 0.4) * (jog.curando > 0 ? 0.6 : 1) * (1 + 0.04 * nv('velocidade'));
+    let vel = 5.2 * st.lenta * (correndo ? 1.45 : 1) * (1 - mira * 0.4) * (jog.curando > 0 ? 0.6 : 1) * (1 + 0.04 * nv('velocidade')) * bonus.vel;
     const sy = Math.sin(jog.yaw), cy = Math.cos(jog.yaw);
     mov.x = (-sy * f + cy * s) * vel;
     mov.z = (-cy * f - sy * s) * vel;
@@ -2428,7 +2480,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
           hud.ext.style.display = 'block';
           anunciar('Helicóptero por 30s! Extraia ou continue lutando', '#40ff80', 4);
           som.raro();
-        } else { estado = 'preparo'; timerEstado = 7; }
+        } else { estado = 'preparo'; timerEstado = 7; oferecerCartas(); }
       }
     } else if (estado === 'extracao') {
       hud.onda.textContent = sobrevivencia ? `EXTRAÇÃO (${Math.ceil(janela)}s)` : 'EXTRAÇÃO';
@@ -2668,6 +2720,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
 
   // ---------- início ----------
   $('pausa').style.display = 'none';
+  $('cartas').style.display = 'none';
   hud.bossBar.style.display = 'none';
   hud.ext.style.display = 'none';
   hud.rec.style.display = 'none';
@@ -2686,7 +2739,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   marca('pronto');
   raf = requestAnimationFrame(t => { ultimo = t; quadro(t); });
 
-  if (location.search.includes('debug')) window.__raid = { baus, portas, objetivos, interativos, perigos, quebraveis, fontes, cofres, obst, tp(x, z) { jog.x = x; jog.z = z; jog.y = 0; }, interagir, abrirPorta, abrirBau, iniciarObjetivo, completarObjetivo, iniciarEvento, terminarEvento, get evento() { return evento; }, get energia() { return energia; }, get objFeitos() { return objFeitos; }, get interAtual() { return interAtual; }, modsAchados, get placar2() { return placar; }, falar, jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; }, facada, esquivar, colocarTorreta, lancarSuprimento, placar, get ganho() { return ganho; } };
+  if (location.search.includes('debug')) window.__raid = { baus, portas, objetivos, interativos, perigos, quebraveis, fontes, cofres, obst, tp(x, z) { jog.x = x; jog.z = z; jog.y = 0; }, interagir, abrirPorta, abrirBau, iniciarObjetivo, completarObjetivo, iniciarEvento, terminarEvento, get evento() { return evento; }, oferecerCartas, aplicarCarta, bonus, get escolhendo() { return escolhendo; }, get energia() { return energia; }, get objFeitos() { return objFeitos; }, get interAtual() { return interAtual; }, modsAchados, get placar2() { return placar; }, falar, jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; }, facada, esquivar, colocarTorreta, lancarSuprimento, placar, get ganho() { return ganho; } };
   return {
     pausar,
     abandonar() { pausado = false; terminar(false); },

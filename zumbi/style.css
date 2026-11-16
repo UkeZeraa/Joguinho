@@ -486,3 +486,18 @@ body.mobile #hudInter { top: 56%; font-size: 15px; }
 .delta .bom { color: #7dff8e; } .delta .ruim { color: #ff8a70; }
 .loja.mod { width: 200px; border-top: 3px solid var(--cor, #555); }
 .zinfo { font-size: 11px; color: #b9b2a4; margin-top: 4px; line-height: 1.35; }
+
+/* ---------- cartas de melhoria ---------- */
+#cartas { position: absolute; inset: 0; z-index: 25; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: radial-gradient(circle, rgba(20,10,8,.75), rgba(0,0,0,.92)); font-family: var(--f-titulo); }
+#cartas h2 { color: #ffd86a; letter-spacing: 6px; font-size: 30px; text-shadow: 0 0 18px #c08a20; }
+#cartas p { color: #b8b0a0; font-size: 13px; letter-spacing: 2px; margin-bottom: 14px; }
+#cartasLista { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding: 0 12px; }
+.cartaM { width: 200px; min-height: 230px; background: linear-gradient(180deg, #2a1c14, #120c0a); border: 2px solid #8a6a2a; border-radius: 6px; color: #eee; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 12px; font-family: inherit; transition: transform .12s, border-color .12s, box-shadow .12s; }
+.cartaM:hover, .cartaM:active { transform: translateY(-6px) scale(1.03); border-color: #ffd86a; box-shadow: 0 0 26px rgba(255,216,106,.45); }
+.cartaM i { font-style: normal; font-size: 46px; }
+.cartaM b { font-size: 19px; letter-spacing: 1px; color: #ffd86a; text-align: center; }
+.cartaM span { font-size: 13px; color: #d8d0c0; text-align: center; line-height: 1.35; font-family: var(--f-texto, inherit); }
+.cartaM small { margin-top: auto; font-size: 10px; letter-spacing: 2px; color: #8a8070; text-transform: uppercase; }
+body.mobile .cartaM { width: 150px; min-height: 170px; padding: 10px 8px; } body.mobile .cartaM i { font-size: 30px; } body.mobile .cartaM b { font-size: 15px; } body.mobile #cartas h2 { font-size: 20px; }
+.diarioBox { border: 1px solid #8a6a2a; background: rgba(255,216,106,.06); border-radius: 4px; padding: 10px 12px; margin: 8px 0; font-size: 13px; line-height: 1.5; }
+.diarioBox b { color: #ffd86a; }
