@@ -7,11 +7,12 @@
     "start": "expo start",
     "tunnel": "expo start --tunnel",
     "android": "expo start --android",
-    "build:apk": "eas build -p android --profile preview",
-    "build:android": "eas build -p android --profile production",
-    "build:ios": "eas build -p ios --profile production",
+    "build:apk": "npm run empacotar && eas build -p android --profile preview",
+    "build:android": "npm run empacotar && eas build -p android --profile production",
+    "build:ios": "npm run empacotar && eas build -p ios --profile production",
     "submit:android": "eas submit -p android --latest",
-    "submit:ios": "eas submit -p ios --latest"
+    "submit:ios": "eas submit -p ios --latest",
+    "empacotar": "node scripts/empacotar.mjs"
   },
   "dependencies": {
     "expo": "~58.0.23",
@@ -20,5 +21,8 @@
     "react": "19.3.0",
     "react-native": "0.88.1",
     "react-native-webview": "14.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

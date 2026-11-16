@@ -676,7 +676,7 @@ function fimRaid(r) {
     const depois = maestria(w).nivel;
     if (depois > antes) subidas.push({ nome: w.nome, nivel: depois, slot: SLOTS_MOD.find(s => s.nivel > antes && s.nivel <= depois) });
   }
-  for (const id of r.mods || []) save.mods[id] = (save.mods[id] || 0) + 1;
+  for (const id of r.acessorios || []) save.mods[id] = (save.mods[id] || 0) + 1;
   let vendidas = 0;
   for (const a of r.armas) {
     if (save.inv.length < MAX_INV) save.inv.push(a);
@@ -694,7 +694,7 @@ function fimRaid(r) {
     ${prontas ? `<b style="color:#7dff8e">✔ ${prontas} missão(ões) pronta(s) para resgatar!</b><br>` : ''}
     ${r.objetivo && r.objetivo.total ? `Objetivo (${r.objetivo.nome}): <b style="color:${r.objetivo.completo ? '#7dff8e' : '#ffd86a'}">${r.objetivo.feitos}/${r.objetivo.total}${r.objetivo.completo ? ' · cofre liberado!' : ''}</b><br>` : ''}
     ${subidas.map(x => `<b style="color:#ffd86a">⬆ ${x.nome} subiu para Maestria ${x.nivel}${x.slot ? ` — slot de ${x.slot.nome} liberado!` : ''}</b><br>`).join('')}
-    ${(r.mods || []).length ? `Acessórios recuperados: <b>${r.mods.map(id => MOD_POR_ID[id].nome).join(', ')}</b><br>` : (r.modsPerdidos || []).length ? `<span style="color:#ff8080">${r.modsPerdidos.length} acessório(s) perdido(s).</span><br>` : ''}
+    ${(r.acessorios || []).length ? `Acessórios recuperados: <b>${r.acessorios.map(id => MOD_POR_ID[id].nome).join(', ')}</b><br>` : (r.modsPerdidos || []).length ? `<span style="color:#ff8080">${r.modsPerdidos.length} acessório(s) perdido(s).</span><br>` : ''}
     Grana: <b style="color:#7dff8e">+${fmt(r.ganho)}</b>${r.bonus ? ` (inclui bônus de extração ${fmt(r.bonus)})` : ' (morto: só 30% da grana foi salva)'}<br>
     ${r.extraido ? (r.armas.length ? `Armas recuperadas: <b>${r.armas.length}</b>${vendidas ? ` (${vendidas} vendidas, arsenal cheio)` : ''}` : 'Nenhuma arma encontrada.')
       : (r.perdidas.length ? `<span style="color:#ff8080">${r.perdidas.length} arma(s) da mochila foram perdidas.</span>` : '')}`;

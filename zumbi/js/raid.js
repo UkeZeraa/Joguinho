@@ -1637,7 +1637,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       bonus: extraido ? bonusExt : 0,
       armas: extraido ? armasAchadas : [],
       perdidas: extraido ? [] : armasAchadas,
-      mods: extraido ? modsAchados : [], modsPerdidos: extraido ? [] : modsAchados,
+      acessorios: extraido ? modsAchados : [], modsPerdidos: extraido ? [] : modsAchados,
       kills: armas.map(a => ({ uid: a.def.uid, kills: a.kills })),
       objetivo: { completo: objCompleto, feitos: objFeitos, total: objTotal, nome: zona.objetivo ? zona.objetivo.nome : '' },
       granadas: jog.granadas, kits: jog.kits, torretas: jog.torretas,

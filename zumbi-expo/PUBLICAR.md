@@ -1,17 +1,16 @@
 # Como publicar o Apocalipse Z nos celulares (fora do Expo Go)
 
-O app em `zumbi-expo/` é uma "casca" Expo que abre o jogo (a pasta `zumbi/`) numa WebView em tela cheia.
-Isso significa que existem **dois pedaços** para publicar:
+O app em `zumbi-expo/` é uma "casca" Expo com uma WebView em tela cheia. Ele tem **dois modos** (`OFFLINE` no topo do `App.js`):
 
-1. **O jogo (site)** — precisa estar numa URL pública (GitHub Pages, no seu caso).
-2. **O app** — o instalável (.apk / .aab / .ipa) feito com o **EAS Build**, que aponta para essa URL.
+- **`OFFLINE = true` (padrão): o jogo vem embutido no APK.** Não precisa de hospedagem nem de internet. O arquivo
+  `assets/jogo.js` é o jogo inteiro (HTML + JS + CSS) gerado por `npm run empacotar`; os scripts `build:*` já rodam isso antes de gerar o app.
+  Toda vez que o jogo mudar, gere um APK novo.
+- **`OFFLINE = false`:** o app abre o jogo pela URL do GitHub Pages (`GAME_URL`). Precisa de hospedagem, mas atualizar o jogo não exige APK novo.
 
-Quando você atualizar o jogo (novas armas, zonas...), basta publicar o site de novo: **o app não precisa ser
-refeito** (só se mudar ícone, nome, versão ou o código de `App.js`).
+No modo embutido, pule a seção 0 (hospedar). Limite do modo embutido: as fontes do Google não carregam sem internet (cai para fonte do sistema)
+e os clipes de voz do Fish (`zumbi/audio/`) não vão no pacote ainda: o jogo usa os sons sintetizados.
 
----
-
-## 0. Antes de tudo: publicar o jogo no GitHub Pages
+## 0. (Só no modo `OFFLINE = false`) publicar o jogo no GitHub Pages
 
 1. Faça o merge do Pull Request deste branch na `main`.
 2. No GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch → `main` / `(root)`**.
