@@ -145,6 +145,9 @@ export const CONSUMIVEIS = {
   granadas: { nome: 'Granada', preco: 150, max: 5, icone: '💣', desc: 'Explode em área. Ótima contra hordas e armaduras.' },
   kits:     { nome: 'Kit Médico', preco: 200, max: 5, icone: '✚', desc: 'Recupera 60 de vida.' },
   torretas: { nome: 'Torreta Sentinela', preco: 600, max: 2, icone: '⚙', desc: 'Atira sozinha nos zumbis por 30 segundos.' },
+  molotovs: { nome: 'Coquetel Molotov', preco: 250, max: 4, icone: '🔥', desc: 'Quebra no chão e deixa uma poça de fogo que queima a horda por 7 s. (tecla X)' },
+  minas: { nome: 'Mina Terrestre', preco: 300, max: 4, icone: '✷', desc: 'Fica no chão e explode quando um zumbi pisa. Até 3 armadas. (tecla Z)' },
+  iscas: { nome: 'Isca Sonora', preco: 200, max: 3, icone: '📢', desc: 'Apita por 10 s atraindo a horda e depois explode. (tecla B)' },
 };
 
 export const CAIXAS = [
@@ -278,6 +281,30 @@ export function desafioDiario(data = hojeStr()) {
 }
 export function pontosDiario(r) { return r.abates * 10 + (r.onda || 0) * 100 + (r.extraido ? 1000 : 0) + (r.objetivo && r.objetivo.completo ? 500 : 0); }
 
+// ---------- conquistas (cada uma paga uma vez) ----------
+// teste(save, r): r é o resultado da raid que acabou de terminar
+const CHEFES_TODOS = ['acougueiro', 'chefe', 'colosso', 'rainha'];
+export const CONQUISTAS = [
+  { id: 'sangue', nome: 'Primeiro Sangue', icone: '🩸', desc: 'Elimine o primeiro zumbi', grana: 200, xp: 50, teste: s => s.stats.abates >= 1 },
+  { id: 'cem', nome: 'Cem Cabeças', icone: '💀', desc: 'Elimine 100 zumbis', grana: 800, xp: 200, teste: s => s.stats.abates >= 100 },
+  { id: 'mil', nome: 'Exterminador', icone: '☠', desc: 'Elimine 1.000 zumbis', grana: 5000, xp: 1000, teste: s => s.stats.abates >= 1000 },
+  { id: 'mira', nome: 'Mira de Águia', icone: '🎯', desc: 'Faça 100 headshots', grana: 1000, xp: 250, teste: s => (s.stats.headshots || 0) >= 100 },
+  { id: 'extrai', nome: 'Saída de Emergência', icone: '🚁', desc: 'Extraia de uma raid', grana: 300, xp: 80, teste: s => s.stats.extracoes >= 1 },
+  { id: 'turista', nome: 'Turista do Apocalipse', icone: '🗺', desc: 'Extraia de todas as 5 zonas', grana: 6000, xp: 1500, teste: s => ZONAS.every(z => (s.zonasExtraidas || []).includes(z.id)) },
+  { id: 'cofre', nome: 'Arrombador', icone: '🔓', desc: 'Complete o objetivo de uma zona e libere o cofre', grana: 600, xp: 150, teste: s => (s.stats.cofres || 0) >= 1 },
+  { id: 'cofres5', nome: 'Ladrão de Cofres', icone: '💰', desc: 'Libere 5 cofres', grana: 2500, xp: 600, teste: s => (s.stats.cofres || 0) >= 5 },
+  { id: 'chefe', nome: 'Matador de Gigantes', icone: '👹', desc: 'Derrote um chefe', grana: 800, xp: 200, teste: s => CHEFES_TODOS.some(c => (s.stats.porTipo || {})[c]) },
+  { id: 'chefes', nome: 'Caçador de Chefes', icone: '👑', desc: 'Derrote os 4 chefes', grana: 5000, xp: 1200, teste: s => CHEFES_TODOS.every(c => (s.stats.porTipo || {})[c]) },
+  { id: 'sobrev10', nome: 'Resistente', icone: '⏳', desc: 'Chegue à onda 10 na Sobrevivência', grana: 1500, xp: 400, teste: s => (s.stats.melhorSobrevivencia || 0) >= 10 },
+  { id: 'sobrev20', nome: 'Imortal', icone: '♾', desc: 'Chegue à onda 20 na Sobrevivência', grana: 6000, xp: 1500, teste: s => (s.stats.melhorSobrevivencia || 0) >= 20 },
+  { id: 'mestre', nome: 'Mestre de Armas', icone: '⭐', desc: 'Leve uma arma à Maestria 10', grana: 4000, xp: 1000, teste: s => s.inv.some(a => maestria(a).nivel >= 10) },
+  { id: 'montada', nome: 'Arma Montada', icone: '🔧', desc: 'Instale 5 acessórios na mesma arma', grana: 1500, xp: 300, teste: s => s.inv.some(a => Object.keys(a.mods || {}).length >= 5) },
+  { id: 'cartas', nome: 'Baralho Completo', icone: '🃏', desc: 'Use 5 cartas de melhoria numa raid', grana: 1200, xp: 300, teste: (s, r) => r && (r.cartas || []).length >= 5 },
+  { id: 'diario', nome: 'Rotina de Sobrevivente', icone: '📅', desc: 'Extraia de um Desafio diário', grana: 1000, xp: 250, teste: s => !!(s.diario && s.diario.premio) },
+  { id: 'gadgets', nome: 'Engenhoca', icone: '🧨', desc: 'Elimine 25 zumbis com molotov ou minas', grana: 1200, xp: 300, teste: s => (s.stats.gadgetKills || 0) >= 25 },
+  { id: 'mitico', nome: 'Lenda Viva', icone: '🌟', desc: 'Tenha uma arma Mítica', grana: 3000, xp: 800, teste: s => s.inv.some(a => a.tier >= 5) },
+];
+
 // ---------- perícias (árvore de habilidades) ----------
 export const PERICIAS = [
   { id: 'vida', nome: 'Vigor', icone: '❤', max: 5, desc: '+15 de vida máxima por nível' },
@@ -410,7 +437,7 @@ function saveInicial() {
     coletes: ['nenhum'], colete: 'nenhum',
     camos: ['padrao'],
     mods: { compensador: 1, estendido: 1 },
-    granadas: 2, kits: 2, torretas: 1,
+    granadas: 2, kits: 2, torretas: 1, molotovs: 1, minas: 1, iscas: 1, conquistas: {},
     xp: 0, nivel: 1, pontos: 0, pericias: {}, missoes: [], zonasExtraidas: [],
     stats: { raids: 0, extracoes: 0, mortes: 0, abates: 0, melhorOnda: 0, melhorSobrevivencia: 0, headshots: 0, porTipo: {} },
     opcoes: { som: true, sens: 1 },

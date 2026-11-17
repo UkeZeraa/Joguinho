@@ -5,10 +5,14 @@
 Já no jogo:
 - **Cartas de melhoria entre ondas:** ao limpar uma onda, escolha 1 de 3 bônus (15 cartas) que valem até o fim da raid. Teclas 1/2/3 ou toque.
 - **Desafio diário:** aba Raid → Desafio diário. Zona, modificadores e armas fixos para o dia, pontuação com recorde salvo e prêmio na primeira extração.
+- **Gadgets novos** (compre na Loja → Suprimentos): **Coquetel Molotov** (tecla X, poça de fogo por 7 s), **Mina Terrestre**
+  (tecla Z, explode quando um zumbi pisa, até 3 armadas) e **Isca Sonora** (tecla B, apita 10 s atraindo a horda e explode).
+  No celular: botão 🔥 usa o gadget escolhido e ↻ troca.
+- **Conquistas:** 18 conquistas na aba Missões (abates, headshots, chefes, cofres, Sobrevivência, maestria, gadgets...), cada uma paga grana e XP uma vez.
 
-Planejado: novos modos (defesa, escolta, contra o tempo), lança-chamas, lança-granadas, besta, minas, molotov, isca sonora,
+Planejado: novos modos (defesa, escolta, contra o tempo), lança-chamas, lança-granadas, besta,
 companheiro (cachorro/soldado), base que evolui, zumbis que escalam/agarram/explodem em ninhada, mini-chefes aleatórios,
-conquistas e cosméticos. Multiplayer na mesma Wi-Fi fica para depois.
+cosméticos. Multiplayer na mesma Wi-Fi fica para depois.
 
 ## 1.0 "Zonas Vivas"
 

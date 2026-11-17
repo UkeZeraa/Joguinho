@@ -702,7 +702,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     x: INICIO.x, z: INICIO.z, yaw: 0, pitch: 0, hp: 100 + 15 * nv('vida'), hpMax: 100 + 15 * nv('vida'),
     torretas: loadout.torretas || 0, invul: 0, dash: 0, dashX: 0, dashZ: 0, cdEsq: 0, cdFaca: 0, faca: 0, semDano: 0,
     armadura: loadout.armadura, armaduraMax: loadout.armadura,
-    granadas: loadout.granadas, kits: loadout.kits, curando: 0, passo: 0, morto: false,
+    granadas: loadout.granadas, kits: loadout.kits, molotovs: loadout.molotovs || 0, minas: loadout.minas || 0, iscas: loadout.iscas || 0, curando: 0, passo: 0, morto: false,
     y: 0, vy: 0, noChao: true, pousou: 0,
   };
   const armas = loadout.armas.filter(Boolean).map(a => {
@@ -799,6 +799,66 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     projeteis.push(p);
     som.troca();
     atualizarHudItens();
+  }
+  // ---------- gadgets: molotov, mina e isca sonora ----------
+  const matMolotov = new THREE.MeshLambertMaterial({ color: 0x6a8a3a, emissive: 0x401800 });
+  const matIsca = new THREE.MeshLambertMaterial({ color: 0xd0b020, emissive: 0x302000 });
+  const minas = [], iscasAtivas = [];
+  let gadgetSel = 0;
+  const GADGETS = ['molotovs', 'minas', 'iscas'];
+  function arremessar(tipo, mat) {
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    const m = new THREE.Mesh(geoEsf, mat); m.scale.set(0.09, 0.16, 0.09);
+    const p = { tipo, m, x: jog.x + dir.x * 0.5, y: jog.y + ALTURA_OLHO - 0.1, z: jog.z + dir.z * 0.5, vx: dir.x * 15, vy: dir.y * 15 + 4.5, vz: dir.z * 15, t: tipo === 'isca' ? 1.2 : 4 };
+    m.position.set(p.x, p.y, p.z); cena.add(m);
+    projeteis.push(p);
+    som.troca();
+  }
+  function usarGadget(id) {
+    if (jog.morto || pausado) return;
+    if (!id) {
+      for (let k = 0; k < 3 && !jog[GADGETS[gadgetSel]]; k++) gadgetSel = (gadgetSel + 1) % 3;
+      id = GADGETS[gadgetSel];
+    }
+    if (!jog[id]) { feed('Sem ' + { molotovs: 'molotovs', minas: 'minas', iscas: 'iscas' }[id], '#aaa'); som.seco(); return; }
+    if (id === 'molotovs') { jog.molotovs--; arremessar('molotov', matMolotov); }
+    if (id === 'iscas') { jog.iscas--; arremessar('isca', matIsca); }
+    if (id === 'minas') {
+      if (minas.length >= 3) { feed('Máximo de 3 minas armadas', '#aaa'); return; }
+      jog.minas--;
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.1, 12), new THREE.MeshLambertMaterial({ color: 0x3a4230 })));
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }));
+      led.position.y = 0.07; g.add(led);
+      g.position.set(jog.x, 0.05, jog.z); cena.add(g);
+      minas.push({ x: jog.x, z: jog.z, g, led, arma: 1.2 });
+      som.recarga(); feed('Mina armada', '#ffcc60');
+    }
+    atualizarHudItens();
+  }
+  function trocarGadget() { gadgetSel = (gadgetSel + 1) % 3; atualizarHudItens(); som.clique(); }
+  function atualizarGadgets(dt) {
+    for (let i = minas.length - 1; i >= 0; i--) {
+      const mn = minas[i];
+      mn.arma -= dt;
+      mn.led.visible = mn.arma > 0 ? true : Math.floor(tempo * 3) % 2 === 0;
+      if (mn.arma > 0) continue;
+      if (zumbis.some(z => z.vivo && Math.hypot(z.x - mn.x, z.z - mn.z) < 1.6 + z.raio)) {
+        cena.remove(mn.g); minas.splice(i, 1);
+        explodir(mn.x, 0.3, mn.z, 5, 340, 'mina');
+      }
+    }
+    for (let i = iscasAtivas.length - 1; i >= 0; i--) {
+      const ic = iscasAtivas[i];
+      ic.t -= dt; ic.bip -= dt;
+      if (ic.bip <= 0) { ic.bip = Math.max(0.15, ic.t / 10 * 0.6); som.tick(); ic.f.int = ic.f.int ? 0 : 10; }
+      if (distracao !== ic) distracao = ic;
+      if (ic.t <= 0) {
+        cena.remove(ic.m); ic.f.int = 0; iscasAtivas.splice(i, 1);
+        if (distracao === ic) distracao = null;
+        explodir(ic.x, 0.4, ic.z, 4.5, 220, 'mina');
+      }
+    }
   }
 
   // ---------- loot ----------
@@ -920,7 +980,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     hud.mun.classList.toggle('pouca', a.pente <= Math.ceil(a.st.pente * 0.25));
   }
   function atualizarHudItens() {
-    hud.itens.innerHTML = `💣 ${jog.granadas} &nbsp; ✚ ${jog.kits} &nbsp; ⚙ ${jog.torretas}`;
+    const sel = g => GADGETS[gadgetSel] === g ? ' class="gsel"' : '';
+    hud.itens.innerHTML = `💣 ${jog.granadas} &nbsp; ✚ ${jog.kits} &nbsp; ⚙ ${jog.torretas} &nbsp; <span${sel('molotovs')}>🔥 ${jog.molotovs}</span> <span${sel('minas')}>✷ ${jog.minas}</span> <span${sel('iscas')}>📢 ${jog.iscas}</span>`;
+    const bgd = $('btnGadget'); if (bgd) bgd.innerHTML = `${{ molotovs: '🔥', minas: '✷', iscas: '📢' }[GADGETS[gadgetSel]]}<span>${jog[GADGETS[gadgetSel]]}</span>`;
     const bg = $('btnGranada'), bk = $('btnKit'), bt = $('btnTorreta');
     if (bg) bg.querySelector('span').textContent = jog.granadas;
     if (bk) bk.querySelector('span').textContent = jog.kits;
@@ -1020,6 +1082,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       for (let i = 0; i < 6; i++) particula(z.x, hy, z.z, rand(-3, 3), rand(1, 5), rand(-3, 3), rand(0.6, 1.2), rand(0.06, 0.1), 0x8a7a6a);
     }
     abates++;
+    if (z.porGadget) placar.gadgetKills = (placar.gadgetKills || 0) + 1;
     if (z.ultimaArma) z.ultimaArma.kills++;
     placar.porTipo[z.tipo] = (placar.porTipo[z.tipo] || 0) + 1;
     if (origem === 'faca') placar.facao++;
@@ -1065,7 +1128,8 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       const d = Math.hypot(zb.x - x, zb.z - z);
       if (d < raio + zb.raio) danoZumbi(zb, dano * (1 - 0.6 * d / (raio + zb.raio)) * (origem === 'zumbi' ? 0.5 : 1), false, zb.x, 1.4 * zb.escala, zb.z, 'explosao');
     }
-    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' ? 0.5 : 1), false, { x, z });
+    if (origem === 'mina') for (const zb of zumbis) if (zb.vivo && Math.hypot(zb.x - x, zb.z - z) < raio + zb.raio) zb.porGadget = true;
+    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' || origem === 'mina' ? 0.5 : 1), false, { x, z });
     for (const q of quebraveis) {
       if (q.hp > 0 && !q.estourado && Math.hypot((q.minx + q.maxx) / 2 - x, (q.minz + q.maxz) / 2 - z) < raio) {
         q.hp = 0;
@@ -1645,7 +1709,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       kills: armas.map(a => ({ uid: a.def.uid, kills: a.kills })),
       cartas: cartasPegas,
       objetivo: { completo: objCompleto, feitos: objFeitos, total: objTotal, nome: zona.objetivo ? zona.objetivo.nome : '' },
-      granadas: jog.granadas, kits: jog.kits, torretas: jog.torretas,
+      granadas: jog.granadas, kits: jog.kits, torretas: jog.torretas, molotovs: jog.molotovs, minas: jog.minas, iscas: jog.iscas,
       placar, xp: placar.xp + (extraido ? Math.round(200 * recompensa) : 0),
     };
     limpar();
@@ -1697,6 +1761,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     if (e.code === 'Digit2') trocarArma(1);
     if (e.code === 'KeyQ') trocarArma();
     if (e.code === 'KeyG') lancarGranada();
+    if (e.code === 'KeyX') usarGadget('molotovs');
+    if (e.code === 'KeyZ') usarGadget('minas');
+    if (e.code === 'KeyB') usarGadget('iscas');
     if (e.code === 'KeyH' || e.code === 'KeyF') usarKit();
     if (e.code === 'KeyE') { if (!interagir()) facada(); }
     if (e.code === 'KeyV') facada();
@@ -1743,6 +1810,8 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
         else if (acao === 'recarregar') recarregar();
         else if (acao === 'trocar') trocarArma();
         else if (acao === 'granada') lancarGranada();
+        else if (acao === 'gadget') usarGadget();
+        else if (acao === 'trocarGadget') trocarGadget();
         else if (acao === 'kit') usarKit();
         else if (acao === 'pular') pular();
         else if (acao === 'facao') facada();
@@ -2032,8 +2101,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       if (p.t !== undefined) { p.t -= dt; if (p.t <= 0) { perigos.splice(i, 1); continue; } }
       if (Math.hypot(jog.x - p.x, jog.z - p.z) < p.r && jog.y < 0.7 && !jog.morto) {
         p.tick -= dt;
-        if (p.tick <= 0) { p.tick = 0.5; danoJogador(p.dps * 0.5 * (0.8 + 0.2 * zona.dif), true); if (!p.avisou || tempo - p.avisou > 3) { p.avisou = tempo; feed(p.tipo === 'fogo' ? 'Você está queimando!' : 'Ácido! Saia da poça!', '#9cff3a'); } }
+        if (p.tick <= 0) { p.tick = 0.5; danoJogador(p.dps * 0.5 * (0.8 + 0.2 * zona.dif) * (p.queima ? 0.5 : 1), true); if (!p.avisou || tempo - p.avisou > 3) { p.avisou = tempo; feed(p.tipo === 'fogo' ? 'Você está queimando!' : 'Ácido! Saia da poça!', '#9cff3a'); } }
       }
+      if (p.queima) for (const z of zumbis) if (z.vivo && Math.hypot(z.x - p.x, z.z - p.z) < p.r + z.raio) { if (z.fogo <= 0) z.porGadget = true; z.fogo = Math.max(z.fogo, 1.2); z.fogoDps = Math.max(z.fogoDps, 45 * (0.7 + 0.3 * zona.dif)); }
       if (p.tipo === 'fogo' && Math.random() < dt * 20) particula(p.x + rand(-p.r, p.r) * 0.7, 0.3, p.z + rand(-p.r, p.r) * 0.7, 0, rand(1, 2.5), 0, rand(0.4, 0.8), rand(0.1, 0.2), Math.random() < 0.5 ? 0xff6a10 : 0xffc020, -1);
     }
     for (const v of vapores) { v.t -= dt; if (v.t <= 0) { v.t = rand(0.25, 0.5); marcas.fumaca(v.x + rand(-0.2, 0.2), 0.3, v.z + rand(-0.2, 0.2), 0.9); if (Math.random() < 0.5) particula(v.x, 0.3, v.z, rand(-0.4, 0.4), rand(2, 3.5), rand(-0.4, 0.4), 0.7, 0.07, 0xe8f4f0, -0.5); } }
@@ -2364,6 +2434,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     }
     atualizarInteracao(dt);
     atualizarEvento(dt);
+    atualizarGadgets(dt);
     atualizarTorretas(dt);
     atualizarNuvens(dt);
     atualizarChoques(dt);
@@ -2376,7 +2447,18 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       p.vy -= (p.tipo === 'granada' ? 20 : 9) * dt;
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       let remover = false;
-      if (p.tipo === 'granada') {
+      if (p.tipo === 'molotov') {
+        let quebrou = p.y < 0.1 || p.t <= 0;
+        for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) quebrou = true;
+        if (Math.random() < 0.5) particula(p.x, p.y, p.z, 0, 0, 0, 0.25, 0.06, 0xff8a20, 0);
+        if (quebrou) {
+          remover = true;
+          const x = clamp(p.x, -L + 2, L - 2), z = clamp(p.z, -L + 2, L - 2);
+          perigo({ x, z, r: 3.2, dps: 6, tipo: 'fogo', t: 7, queima: true });
+          fogosTemp.push({ x, z, t: 7 });
+          bolaFogo(x, 0.6, z, 2.2, 0xff7020); som.quebra(); som.explosao();
+        }
+      } else if (p.tipo === 'granada' || p.tipo === 'isca') {
         if (p.y < 0.12) { p.y = 0.12; p.vy = -p.vy * 0.35; p.vx *= 0.6; p.vz *= 0.6; }
         for (const b of obst) {
           if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) {
@@ -2385,7 +2467,14 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
             else { p.vz = -p.vz * 0.4; p.z += p.vz > 0 ? ez + 0.05 : -(ez + 0.05); }
           }
         }
-        if (p.t <= 0) { explodir(p.x, p.y + 0.3, p.z, 6.5, 320, 'granada'); remover = true; }
+        if (p.t <= 0 && p.tipo === 'granada') { explodir(p.x, p.y + 0.3, p.z, 6.5, 320, 'granada'); remover = true; }
+        if (p.t <= 0 && p.tipo === 'isca') {
+          remover = true;
+          const ic = { x: p.x, z: p.z, t: 10, bip: 0, m: p.m, f: fonte(p.x, 0.6, p.z, 0xffd020, 10, 9) };
+          p.m.position.set(p.x, 0.12, p.z); iscasAtivas.push(ic); distracao = ic;
+          feed('Isca sonora ativa: a horda vai até ela!', '#ffcc60');
+          p.m = null;
+        }
       } else {
         const cor = p.tipo === 'pedra' ? 0x6a6050 : p.tipo === 'acido' ? 0xd040ff : 0x9cff3a;
         if (Math.random() < 0.6) particula(p.x, p.y, p.z, 0, 0, 0, 0.3, p.tipo === 'pedra' ? 0.12 : 0.06, cor, 0);
@@ -2398,8 +2487,8 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
         if (caiu && p.tipo === 'pedra') { bolaFogo(p.x, 0.5, p.z, 2.5, 0x8a7a60); tremor = Math.max(tremor, 0.2); if (dj < 3) danoJogador(p.dano * 0.5, false, p); }
         if (caiu && p.tipo === 'acido') criarNuvem(p.x, p.z, 1.8, 10, 3.5);
       }
-      p.m.position.set(p.x, p.y, p.z);
-      if (remover) { cena.remove(p.m); projeteis.splice(i, 1); }
+      if (p.m) p.m.position.set(p.x, p.y, p.z);
+      if (remover) { if (p.m) cena.remove(p.m); projeteis.splice(i, 1); }
     }
 
     // loot
@@ -2739,7 +2828,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
   marca('pronto');
   raf = requestAnimationFrame(t => { ultimo = t; quadro(t); });
 
-  if (location.search.includes('debug')) window.__raid = { baus, portas, objetivos, interativos, perigos, quebraveis, fontes, cofres, obst, tp(x, z) { jog.x = x; jog.z = z; jog.y = 0; }, interagir, abrirPorta, abrirBau, iniciarObjetivo, completarObjetivo, iniciarEvento, terminarEvento, get evento() { return evento; }, oferecerCartas, aplicarCarta, bonus, get escolhendo() { return escolhendo; }, get energia() { return energia; }, get objFeitos() { return objFeitos; }, get interAtual() { return interAtual; }, modsAchados, get placar2() { return placar; }, falar, jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; }, facada, esquivar, colocarTorreta, lancarSuprimento, placar, get ganho() { return ganho; } };
+  if (location.search.includes('debug')) window.__raid = { baus, portas, objetivos, interativos, perigos, quebraveis, fontes, cofres, obst, tp(x, z) { jog.x = x; jog.z = z; jog.y = 0; }, interagir, abrirPorta, abrirBau, iniciarObjetivo, completarObjetivo, iniciarEvento, terminarEvento, get evento() { return evento; }, oferecerCartas, aplicarCarta, usarGadget, minas, get distracao() { return distracao; }, bonus, get escolhendo() { return escolhendo; }, get energia() { return energia; }, get objFeitos() { return objFeitos; }, get interAtual() { return interAtual; }, modsAchados, get placar2() { return placar; }, falar, jog, zumbis, armas, spawnZumbi, set onda(v) { onda = v; }, get estado() { return estado; }, fire(v) { gatilho = v; disparoSolto = true; }, pular() { timerEstado = 0; }, matarTodos() { filaSpawn = []; zumbis.forEach(z => z.vivo && matar(z, false)); }, mirar(v) { mirando = v; }, pularAgora: pular, get alvo() { return alvoAssist; }, facada, esquivar, colocarTorreta, lancarSuprimento, placar, get ganho() { return ganho; } };
   return {
     pausar,
     abandonar() { pausado = false; terminar(false); },
