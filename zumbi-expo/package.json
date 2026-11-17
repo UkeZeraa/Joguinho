@@ -7,17 +7,19 @@
     "start": "expo start",
     "tunnel": "expo start --tunnel",
     "android": "expo start --android",
-    "build:apk": "npm run empacotar && eas build -p android --profile preview",
-    "build:android": "npm run empacotar && eas build -p android --profile production",
+    "build:apk": "npm run empacotar && eas update:configure --platform android --non-interactive && eas build -p android --profile preview",
+    "build:android": "npm run empacotar && eas update:configure --platform android --non-interactive && eas build -p android --profile production",
     "build:ios": "npm run empacotar && eas build -p ios --profile production",
     "submit:android": "eas submit -p android --latest",
     "submit:ios": "eas submit -p ios --latest",
-    "empacotar": "node scripts/empacotar.mjs"
+    "empacotar": "node scripts/empacotar.mjs",
+    "atualizar": "npm run empacotar && eas update --branch preview --message \"Atualização do jogo\" --non-interactive"
   },
   "dependencies": {
     "expo": "~58.0.23",
     "expo-screen-orientation": "~58.0.4",
     "expo-status-bar": "~58.0.4",
+    "expo-updates": "~58.0.22",
     "react": "19.3.0",
     "react-native": "0.88.1",
     "react-native-webview": "14.0.1"

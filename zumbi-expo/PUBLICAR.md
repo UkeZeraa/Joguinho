@@ -105,3 +105,20 @@ No TestFlight você convida testadores por e-mail antes de mandar para a loja. P
 - **Som:** o navegador só libera o áudio depois do primeiro toque — o jogo já inicia o som no primeiro toque na base.
 - **Chaves e senhas:** nunca coloque a chave do Fish Audio ou do Google Play no repositório. O EAS guarda as credenciais
   de assinatura na nuvem (`eas credentials`).
+
+## 8. Atualizações automáticas (EAS Update)
+
+O app tem o `expo-updates`: o jogo novo chega aos celulares sem gerar APK.
+
+**Uma vez só:**
+1. Token do Expo salvo no GitHub como segredo `EXPO_TOKEN` (Settings → Secrets and variables → Actions).
+2. Gere e instale **um APK novo** (`npm run build:apk`). Os APKs antigos não sabem buscar atualização.
+
+**Depois disso:** cada merge que mexe em `zumbi/` ou `zumbi-expo/` roda a ação **Atualizar jogo no Expo** (aba Actions do GitHub),
+que publica no canal `preview`. O app baixa ao abrir com internet e aplica na abertura seguinte
+(feche e abra de novo para ver na hora).
+
+Também dá para publicar na mão, do seu computador: `npm run atualizar`.
+
+Quando ainda precisa de APK novo: mudar ícone, nome, `app.json`, `version` ou instalar um pacote nativo.
+Ao mudar `version`, as atualizações antigas param de chegar para quem não instalar o APK novo (é de propósito).

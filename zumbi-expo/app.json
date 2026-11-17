@@ -14,7 +14,8 @@
       "backgroundColor": "#0b0606"
     },
     "plugins": [
-      "expo-screen-orientation"
+      "expo-screen-orientation",
+      "expo-updates"
     ],
     "ios": {
       "bundleIdentifier": "com.ukezeraa.apocalipsez",
@@ -34,6 +35,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#120808"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }
