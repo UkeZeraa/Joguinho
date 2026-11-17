@@ -80,6 +80,9 @@
       <h3>Contratos</h3>
       <p class="sub">Complete os contratos durante as raids e resgate a recompensa. Um novo contrato aparece no lugar.</p>
       <div id="missoesLista" class="linha"></div>
+      <h3 style="margin-top:18px">Conquistas</h3>
+      <p class="sub" id="conqResumo"></p>
+      <div id="conquistasLista" class="conqGrade"></div>
     </section>
 
     <!-- BESTIÁRIO -->
@@ -101,7 +104,7 @@
         <button id="btnIniciar" class="btn grande">INICIAR RAID</button>
         <div class="controles">
           <b>PC:</b> WASD mover · Mouse mirar · Clique atirar · Botão direito mirar (ADS) · Shift correr ·
-          Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2 trocar arma · G granada · F kit médico · E interagir (baús, portas, objetivos) · Y inspecionar arma · Esc pausa
+          Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2 trocar arma · G granada · X molotov · Z mina · B isca sonora · F kit médico · E interagir (baús, portas, objetivos) · Y inspecionar arma · Esc pausa
           (se o mouse não ficar preso, segure o botão e arraste para olhar)<br>
           <b>Celular:</b> lado esquerdo anda · arraste no direito para olhar · 🔥 atira (segure) · ⤒ pula · 🔪 facão · » esquiva · ⚙ torreta. Jogue com o celular deitado.
         </div>
@@ -182,6 +185,8 @@
     <button class="tb esquiva" id="btnEsquiva" data-acao="esquiva">»</button>
     <button class="tb torreta" id="btnTorreta" data-acao="torreta">⚙<span>0</span></button>
     <button class="tb interagir" id="btnInteragir" data-acao="interagir">✋</button>
+    <button class="tb gadget" id="btnGadget" data-acao="gadget">🔥<span>0</span></button>
+    <button class="tb trocaGadget" data-acao="trocarGadget">↻</button>
   </div>
 
   <div id="cartas"><h2>ESCOLHA UMA MELHORIA</h2><p>Vale até o fim desta raid</p><div id="cartasLista"></div></div>

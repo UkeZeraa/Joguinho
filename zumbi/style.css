@@ -502,3 +502,15 @@ body.mobile .cartaM { width: 150px; min-height: 170px; padding: 10px 8px; } body
 .diarioBox { border: 1px solid #8a6a2a; background: rgba(255,216,106,.06); border-radius: 4px; padding: 10px 12px; margin: 8px 0; font-size: 13px; line-height: 1.5; }
 .diarioBox b { color: #ffd86a; }
 #raid > #cartas { pointer-events: auto !important; z-index: 40; }
+
+/* ---------- gadgets e conquistas ---------- */
+#hudItens .gsel { color: #ffd86a; text-shadow: 0 0 8px #c08a20; }
+.tb.gadget { right: calc(max(24px, env(safe-area-inset-right)) + 236px); bottom: 50px; background: rgba(255,120,30,.3); }
+.tb.trocaGadget { right: calc(max(24px, env(safe-area-inset-right)) + 244px); bottom: 112px; width: 38px; height: 38px; font-size: 16px; }
+.conqGrade { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.conq { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid #3a3234; border-radius: 4px; background: rgba(0,0,0,.35); opacity: .55; }
+.conq.ok { opacity: 1; border-color: #8a6a2a; background: rgba(255,216,106,.07); }
+.conq i { font-style: normal; font-size: 26px; filter: grayscale(1); }
+.conq.ok i { filter: none; }
+.conq b { display: block; font-size: 13px; color: #ffd86a; }
+.conq span { font-size: 11px; color: var(--fraco); }

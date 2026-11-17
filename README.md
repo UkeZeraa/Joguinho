@@ -188,7 +188,7 @@ com metade da vida, chama corredores e cospe ácido), Colosso Blindado (ondas de
   você não leva dano) e **torreta** (atira sozinha por 30 s).
 - **PC:** WASD andar · mouse mirar · clique atirar · botão direito mirar (ADS) · Shift correr ·
   Espaço pular · V facão · C esquiva · T torreta · R recarregar · Q/1/2/rodinha trocar arma ·
-  G granada · F kit médico · **E interagir** · **Y** inspecionar a arma · Esc pausa.
+  G granada · X molotov · Z mina · B isca sonora · F kit médico · **E interagir** · **Y** inspecionar a arma · Esc pausa.
   Se o mouse não ficar preso na tela (ex.: dentro de outra página), segure o botão e arraste para olhar.
 - **Celular:** o lado esquerdo da tela é o joystick, arraste o lado direito para olhar, segure 🔥 para
   atirar (ele também gira a câmera enquanto você arrasta), ⤒ pula, 🔪 facão, » esquiva e ⚙ torreta; o botão ✋ aparece quando há algo para interagir.

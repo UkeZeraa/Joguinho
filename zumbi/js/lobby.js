@@ -4,7 +4,7 @@ import {
   TIERS, PERKS, TIPOS, CAMOS, COLETES, CONSUMIVEIS, CAIXAS, ZONAS, ZUMBIS, MODIFICADORES, PERICIAS, BOSS_PESOS,
   SLOTS_MOD, MODS, MOD_POR_ID, EVENTOS, modCabe, slotLiberado, maestria, killsParaNivel,
   stats, barras, rolarTier, novaArma, carregar, salvar, resetar, armaPorUid, fmt,
-  xpProximo, gerarMissao, zonaLiberada, CARTAS, desafioDiario, hojeStr, pontosDiario,
+  xpProximo, gerarMissao, zonaLiberada, CONQUISTAS, CARTAS, desafioDiario, hojeStr, pontosDiario,
 } from './dados.js';
 import { criarArma, criarZumbi } from './modelos.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -181,7 +181,7 @@ function renderEquip() {
     slotArma('secundaria', 'Arma secundária', sec) +
     `<div class="slot ${slotFoco === 'colete' ? 'foco' : ''}" data-slot="colete"><div class="rot">Colete</div>
       <div class="nome">${colete.nome}</div><div class="sub">${colete.armadura ? '+' + colete.armadura + ' de armadura' : 'Sem proteção'}</div></div>` +
-    qtd('granadas') + qtd('kits') + qtd('torretas');
+    qtd('granadas') + qtd('kits') + qtd('torretas') + qtd('molotovs') + qtd('minas') + qtd('iscas');
 
   $('slots').querySelectorAll('[data-slot]').forEach(el => el.addEventListener('click', e => {
     if (e.target.dataset.comprar) return;
@@ -555,7 +555,29 @@ function ganharXp(qtd) {
 }
 
 // ---------------- MISSÕES ----------------
+function checarConquistas(r) {
+  save.conquistas ||= {};
+  const novas = [];
+  for (const c of CONQUISTAS) {
+    if (save.conquistas[c.id]) continue;
+    let ok = false;
+    try { ok = c.teste(save, r); } catch (e) { ok = false; }
+    if (!ok) continue;
+    save.conquistas[c.id] = Date.now();
+    save.grana += c.grana;
+    ganharXp(c.xp);
+    novas.push(c);
+  }
+  return novas;
+}
+function renderConquistas() {
+  save.conquistas ||= {};
+  const feitas = CONQUISTAS.filter(c => save.conquistas[c.id]).length;
+  $('conqResumo').textContent = `${feitas} de ${CONQUISTAS.length} desbloqueadas · cada uma paga grana e XP uma vez.`;
+  $('conquistasLista').innerHTML = CONQUISTAS.map(c => `<div class="conq ${save.conquistas[c.id] ? 'ok' : ''}"><i>${c.icone}</i><div><b>${c.nome}</b><span>${c.desc}<br>${fmt(c.grana)} · ${c.xp} XP${save.conquistas[c.id] ? ' · ✔' : ''}</span></div></div>`).join('');
+}
 function renderMissoes() {
+  renderConquistas();
   $('missoesLista').innerHTML = save.missoes.map(m => {
     const pronta = m.progresso >= m.qtd;
     return `<div class="missao ${pronta ? 'pronta' : ''}"><h4>${m.desc}</h4>
@@ -650,13 +672,13 @@ $('btnIniciar').addEventListener('click', () => {
   if (modo === 'diario') {
     const d = desafioDiario();
     raidDiaria = d; zona = ZONAS[d.zonaIdx]; modoRaid = 'raid'; modsRaid = d.mods;
-    loadout = { armas: d.armas.map(a => novaArma(a.tipo, a.tier)), armadura: 60, granadas: 2, kits: 2, torretas: 1, pericias: save.pericias };
+    loadout = { armas: d.armas.map(a => novaArma(a.tipo, a.tier)), armadura: 60, granadas: 2, kits: 2, torretas: 1, molotovs: 1, minas: 1, iscas: 1, pericias: save.pericias };
   } else {
     if (!prim && !sec) return aviso('Equipe pelo menos uma arma!');
     const col = COLETES.find(c => c.id === save.colete);
-    loadout = { armas: [prim, sec], armadura: col.armadura, granadas: save.granadas, kits: save.kits, torretas: save.torretas || 0, pericias: save.pericias };
+    loadout = { armas: [prim, sec], armadura: col.armadura, granadas: save.granadas, kits: save.kits, torretas: save.torretas || 0, molotovs: save.molotovs || 0, minas: save.minas || 0, iscas: save.iscas || 0, pericias: save.pericias };
     // consumíveis vão para a raid
-    save.granadas = 0; save.kits = 0; save.torretas = 0;
+    save.granadas = 0; save.kits = 0; save.torretas = 0; save.molotovs = 0; save.minas = 0; save.iscas = 0;
   }
   save.stats.raids++;
   gravar();
@@ -676,6 +698,7 @@ function fimRaid(r) {
     save.granadas = Math.min(CONSUMIVEIS.granadas.max, r.granadas);
     save.kits = Math.min(CONSUMIVEIS.kits.max, r.kits);
     save.torretas = Math.min(CONSUMIVEIS.torretas.max, r.torretas);
+    for (const g of ['molotovs', 'minas', 'iscas']) save[g] = Math.min(CONSUMIVEIS[g].max, r[g] || 0);
   } else {
     const pts = pontosDiario(r);
     const antes = save.diario && save.diario.data === diaria.data ? save.diario : { data: diaria.data, melhor: 0, premio: false };
@@ -687,6 +710,8 @@ function fimRaid(r) {
     txtDiario = `<b style="color:#ffd86a">Desafio diário: ${pts} pontos${recorde ? ' — NOVO RECORDE DO DIA!' : ` (recorde: ${antes.melhor})`}</b>${premio}<br>`;
   }
   save.grana += r.ganho;
+  if (r.objetivo && r.objetivo.completo && r.extraido) save.stats.cofres = (save.stats.cofres || 0) + 1;
+  save.stats.gadgetKills = (save.stats.gadgetKills || 0) + (r.placar.gadgetKills || 0);
   save.stats.abates += r.abates;
   save.stats.headshots = (save.stats.headshots || 0) + r.placar.headshots;
   save.stats.porTipo = save.stats.porTipo || {};
@@ -719,6 +744,7 @@ function fimRaid(r) {
     if (save.inv.length < MAX_INV) save.inv.push(a);
     else { save.grana += TIERS[a.tier].venda; vendidas++; }
   }
+  const conqNovas = checarConquistas(r);
   gravar();
   $('raid').classList.remove('on');
   $('lobby').style.display = '';
@@ -729,7 +755,7 @@ function fimRaid(r) {
     ${r.placar.chefes.length ? `Chefes derrotados: <b style="color:#ff7090">${r.placar.chefes.map(c => ZUMBIS[c].nome).join(', ')}</b><br>` : ''}
     ${zonaNova ? `<b style="color:#40ff80">🔓 NOVA ZONA LIBERADA: ${zonaNova.nome}!</b><br>` : ''}
     ${prontas ? `<b style="color:#7dff8e">✔ ${prontas} missão(ões) pronta(s) para resgatar!</b><br>` : ''}
-    ${txtDiario}${(r.cartas || []).length ? `Melhorias usadas: <b>${r.cartas.map(id => CARTAS.find(c => c.id === id).nome).join(', ')}</b><br>` : ''}
+    ${conqNovas.map(c => `<b style="color:#ffd86a">🏆 Conquista: ${c.nome} (+${fmt(c.grana)}, +${c.xp} XP)</b><br>`).join('')}${txtDiario}${(r.cartas || []).length ? `Melhorias usadas: <b>${r.cartas.map(id => CARTAS.find(c => c.id === id).nome).join(', ')}</b><br>` : ''}
     ${r.objetivo && r.objetivo.total ? `Objetivo (${r.objetivo.nome}): <b style="color:${r.objetivo.completo ? '#7dff8e' : '#ffd86a'}">${r.objetivo.feitos}/${r.objetivo.total}${r.objetivo.completo ? ' · cofre liberado!' : ''}</b><br>` : ''}
     ${subidas.map(x => `<b style="color:#ffd86a">⬆ ${x.nome} subiu para Maestria ${x.nivel}${x.slot ? ` — slot de ${x.slot.nome} liberado!` : ''}</b><br>`).join('')}
     ${(r.acessorios || []).length ? `Acessórios recuperados: <b>${r.acessorios.map(id => MOD_POR_ID[id].nome).join(', ')}</b><br>` : (r.modsPerdidos || []).length ? `<span style="color:#ff8080">${r.modsPerdidos.length} acessório(s) perdido(s).</span><br>` : ''}
