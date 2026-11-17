@@ -276,6 +276,9 @@ const ANX = {
   fuzil:           { top: 0.068, zm: -0.14,  my: 0.012, mag: [-0.31, -0.04],  guarda: -0.38 },
   escopeta:        { top: 0.058, zm: -0.14,  my: 0.022, mag: null,            guarda: -0.4 },
   sniper:          { top: 0.075, zm: -0.12,  my: 0.004, mag: [-0.1, -0.06],   guarda: -0.42 },
+  lancachamas:     { top: 0.05,  zm: -0.1,   my: 0.012, mag: [-0.17, -0.06], guarda: -0.34 },
+  lancagranadas:   { top: 0.06,  zm: -0.1,   my: 0.012, mag: [-0.1, -0.13],  guarda: -0.38 },
+  besta:           { top: 0.045, zm: -0.12,  my: 0.03,  mag: [-0.06, 0.0],   guarda: -0.3 },
   metralhadora:    { top: 0.088, zm: -0.12,  my: 0.004, mag: [-0.17, -0.12],  guarda: -0.46 },
 };
 export function modsAtivos(arma) {
@@ -636,6 +639,73 @@ export function criarArma(arma, opcoes = {}) {
       ferroCurso = 0.04;
       break;
     }
+    case 'lancachamas': {
+      A.b('corpo', 0.06, 0.07, 0.34, 0, 0, -0.12);
+      A.b('corpo', 0.062, 0.012, 0.3, 0, -0.04, -0.12, { cor: 0xb0b0b0 });
+      A.t('metal', 0.02, 0.36, 0, 0.012, -0.46, { cor: CINZA });
+      for (let i = 0; i < 6; i++) A.t('metal', 0.026, 0.012, 0, 0.012, -0.32 - i * 0.05, { cor: ESCURO });
+      A.t('metal', 0.032, 0.06, 0, 0.012, -0.64, { cor: PRETO });
+      A.t('metal', 0.024, 0.024, 0, 0.012, -0.68, { cor: LATAO });
+      A.b('brilho', 0.012, 0.012, 0.02, 0, -0.016, -0.672);
+      A.barra('polimero', [0, -0.05, -0.02], [0.03, -0.13, 0.08], 0.022, 0.022, { g: 'cil', cor: PRETO });
+      gatilho(A, -0.06, -0.035);
+      empunhadura(A, -0.03, -0.035, -0.22, 0.1);
+      A.b('polimero', 0.03, 0.09, 0.03, 0, -0.07, -0.34, { cor: PRETO });
+      A.b('corpo', 0.05, 0.1, 0.16, 0, -0.03, 0.17);
+      faixas(A, tier, 0.062, 0.02, -0.02, 0.28);
+      C.t('metal', 0.045, 0.24, 0.045, -0.12, -0.06, { cor: 0xb02010 });
+      C.t('metal', 0.045, 0.24, -0.045, -0.12, -0.06, { cor: 0xb02010 });
+      C.t('metal', 0.047, 0.03, 0.045, -0.12, -0.06, { cor: 0xd8b020 });
+      C.t('metal', 0.047, 0.03, -0.045, -0.12, -0.06, { cor: 0xd8b020 });
+      F.b('metal', 0.02, 0.012, 0.04, 0, 0.046, -0.1, { cor: CINZA_CLARO });
+      ponta = -0.69;
+      maoE[1] = -0.08; maoE[2] = -0.34;
+      ferroCurso = 0.004;
+      break;
+    }
+    case 'lancagranadas': {
+      A.b('corpo', 0.06, 0.07, 0.22, 0, 0, -0.06);
+      A.t('metal', 0.034, 0.42, 0, 0.012, -0.36, { cor: CINZA });
+      A.t('metal', 0.038, 0.03, 0, 0.012, -0.56, { cor: PRETO });
+      A.t('metal', 0.026, 0.43, 0, 0.012, -0.36, { cor: ESCURO, var: 0 });
+      trilho(A, 0, 0.048, 0.04, -0.2);
+      gatilho(A, 0.02, -0.035);
+      empunhadura(A, 0.04, -0.035, -0.25, 0.1);
+      A.b('polimero', 0.03, 0.08, 0.03, 0, -0.06, -0.38, { cor: PRETO });
+      A.b('polimero', 0.05, 0.1, 0.22, 0, -0.03, 0.2, { cor: PRETO });
+      A.b('polimero', 0.054, 0.11, 0.022, 0, -0.03, 0.31, { cor: 0x101010 });
+      faixas(A, tier, 0.06, 0.02, 0.02, 0.2);
+      C.t('metal', 0.07, 0.13, 0, -0.03, -0.13, { cor: 0x3a3e38 });
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; C.t('metal', 0.017, 0.132, Math.cos(a) * 0.042, -0.03 + Math.sin(a) * 0.042, -0.13, { cor: PRETO }); }
+      F.b('metal', 0.02, 0.015, 0.04, 0, 0.046, -0.04, { cor: CINZA_CLARO });
+      ponta = -0.58;
+      maoE[1] = -0.07; maoE[2] = -0.38;
+      ferroCurso = 0.02;
+      break;
+    }
+    case 'besta': {
+      A.b('corpo', 0.05, 0.05, 0.5, 0, 0, -0.16);
+      A.b('metal', 0.016, 0.01, 0.46, 0, 0.03, -0.18, { cor: ESCURO });
+      for (const s of [-1, 1]) {
+        A.barra('metal', [0, 0.0, -0.4], [s * 0.2, 0.0, -0.36], 0.03, 0.02, { cor: PRETO });
+        A.barra('metal', [s * 0.2, 0.0, -0.36], [s * 0.3, 0.0, -0.28], 0.024, 0.016, { cor: PRETO });
+        A.barra('metal', [s * 0.3, 0.0, -0.28], [0, 0.032, -0.06], 0.004, 0.004, { cor: 0xd8d0c0 });
+      }
+      A.barra('metal', [0, -0.02, -0.4], [0, -0.06, -0.47], 0.05, 0.01, { cor: CINZA });
+      gatilho(A, 0.0, -0.025);
+      empunhadura(A, 0.03, -0.025, -0.3, 0.1);
+      A.b('polimero', 0.05, 0.09, 0.22, 0, -0.03, 0.2, { cor: 0x5a3a22 });
+      A.b('polimero', 0.054, 0.1, 0.022, 0, -0.03, 0.31, { cor: 0x2a1a10 });
+      faixas(A, tier, 0.05, 0.02, -0.02, 0.3);
+      F.b('metal', 0.008, 0.008, 0.38, 0, 0.036, -0.25, { cor: 0x8a6a3a });
+      F.b('metal', 0.018, 0.022, 0.05, 0, 0.036, -0.46, { cor: CINZA_CLARO, rx: 0.0 });
+      F.b('metal', 0.03, 0.002, 0.04, 0, 0.036, -0.06, { cor: 0xc03020 });
+      C.b('metal', 0.03, 0.03, 0.06, 0, -0.05, 0.0, { cor: CINZA });
+      ponta = -0.5;
+      maoE[1] = -0.05; maoE[2] = -0.3;
+      ferroCurso = 0.0;
+      break;
+    }
     case 'metralhadora':
     default: {
       A.b('corpo', 0.076, 0.085, 0.33, 0, 0.0, -0.1);
@@ -724,7 +794,7 @@ export function criarArma(arma, opcoes = {}) {
     (maoEnoFerrolho ? ferrolho : g).add(maos.esquerda);
   }
 
-  const MIRA = { pistola: [0.045, 0.056], submetralhadora: [0.058, 0.074], fuzil: [0.08, 0.085], escopeta: [0.047, 0.075], sniper: [0.075, 0.075], metralhadora: [0.08, 0.107] };
+  const MIRA = { lancachamas: [0.06, 0.06], lancagranadas: [0.07, 0.075], besta: [0.06, 0.06], pistola: [0.045, 0.056], submetralhadora: [0.058, 0.074], fuzil: [0.08, 0.085], escopeta: [0.047, 0.075], sniper: [0.075, 0.075], metralhadora: [0.08, 0.107] };
   const miraY = Math.max((MIRA[arma.tipo] || [0.08, 0.08])[tier >= 2 ? 1 : 0], anx.miraY);
   g.userData = {
     muzzle, comprimento: Math.abs(ponta), ferrolho, carregador, ferroCurso, miraY,
@@ -786,6 +856,9 @@ const VISUAL = {
   blindado: { lw: 0.48, militar: true, roupa: 0x4a5236, calca: 0x3e4630 }, escudeiro: { lw: 0.48, policia: true, roupa: 0x1a2232, calca: 0x161c28 },
   gritador: { lw: 0.38, magro: true, bocao: true, rasgado: 0.6 }, espectro: { lw: 0.42, magro: true, avental: true, roupa: 0x8aaab8, calca: 0x6a8a98 },
   bruto: { lw: 0.62, forte: true, rasgado: 0.9 },
+  escalador: { lw: 0.38, magro: true, descalco: true, rasgado: 0.85, roupa: 0x3a3a30, calca: 0x2a2a24 },
+  agarrador: { lw: 0.52, forte: true, rasgado: 0.6, roupa: 0x5a2a2a, calca: 0x2a2020 },
+  ninhada: { lw: 0.62, barriga: 1, pustulas: 0xd060ff, roupa: 0x5a3a5a, calca: 0x3a2a3a },
   acougueiro: { lw: 0.66, forte: true, barriga: 0.8, avental: true, roupa: 0xb0a898, calca: 0x2a2420, capuz: true },
   chefe: { lw: 0.6, forte: true, mutante: true, rasgado: 1, roupa: 0x3a0a14, calca: 0x2a0a10 },
   colosso: { lw: 0.66, forte: true, armadura: true, roupa: 0x2a2e28, calca: 0x22251f },

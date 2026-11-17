@@ -9,9 +9,17 @@ Já no jogo:
   (tecla Z, explode quando um zumbi pisa, até 3 armadas) e **Isca Sonora** (tecla B, apita 10 s atraindo a horda e explode).
   No celular: botão 🔥 usa o gadget escolhido e ↻ troca.
 - **Conquistas:** 18 conquistas na aba Missões (abates, headshots, chefes, cofres, Sobrevivência, maestria, gadgets...), cada uma paga grana e XP uma vez.
+- **Armas novas** (caem em baús, caixas e chefes, como as outras):
+  - **Lança-chamas** (primária): jato curto que incendeia tudo à frente; o fogo ignora armadura. Aceita carregador e empunhadura.
+  - **Lança-granadas** (primária): tambor de 6 granadas que explodem no impacto. Aceita mira, carregador e empunhadura.
+  - **Besta** (secundária): silenciosa, dano alto e o virote atravessa 2 zumbis extras. Aceita mira, empunhadura e munição.
+- **Zumbis novos:** **Escalador** (sobe em carros, caixas e torres de vigia), **Agarrador** (segura você quase parado
+  levando dano; solte-se com o facão ou a esquiva) e **Mãe-Ninhada** (ao morrer solta vários rastejantes).
+- **Mini-chefes:** a partir da onda 3, chance de aparecer uma versão **Alfa** de um zumbi forte (7× vida, maior, com barra de vida),
+  que solta arma melhor, acessório e grana.
+- **Ajuste:** zumbis comuns não acertam mais você quando está em cima de uma torre ou carro (só o Escalador alcança).
 
-Planejado: novos modos (defesa, escolta, contra o tempo), lança-chamas, lança-granadas, besta,
-companheiro (cachorro/soldado), base que evolui, zumbis que escalam/agarram/explodem em ninhada, mini-chefes aleatórios,
+Planejado: novos modos (defesa, escolta, contra o tempo), companheiro (cachorro/soldado), base que evolui,
 cosméticos. Multiplayer na mesma Wi-Fi fica para depois.
 
 ## 1.0 "Zonas Vivas"

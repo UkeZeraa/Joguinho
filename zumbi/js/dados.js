@@ -26,6 +26,9 @@ export const TIPOS = {
   fuzil:        { nome: 'Fuzil de Assalto', slot: 'primaria', dano: 28, rpm: 600, auto: true,  pente: 30,  recarga: 2.2, disp: 0.018, alcance: 70, projeteis: 1, recuo: 0.014, zoom: 1.6, modelos: ['AK-47', 'M4A1', 'SCAR-H', 'FAL'] },
   escopeta:     { nome: 'Escopeta',       slot: 'primaria',   dano: 16, rpm: 75,  auto: false, pente: 6,   recarga: 2.6, disp: 0.085, alcance: 22, projeteis: 9, recuo: 0.060, zoom: 1.2, modelos: ['Pump 870', 'SPAS-12', 'Boa Noite', 'AA-12'] },
   sniper:       { nome: 'Sniper',         slot: 'primaria',   dano: 160, rpm: 45, auto: false, pente: 5,   recarga: 3.0, disp: 0.002, alcance: 140, projeteis: 1, recuo: 0.070, zoom: 4.0, modelos: ['AWP', 'Barrett', 'Dragunov', 'M24'] },
+  lancachamas:  { nome: 'Lança-chamas',  slot: 'primaria',   dano: 9,  rpm: 1100, auto: true,  pente: 140, recarga: 3.4, disp: 0.05, alcance: 10, projeteis: 1, recuo: 0.002, zoom: 1.15, lenta: 0.88, especial: 'chamas', slotsMod: ['carregador', 'empunhadura'], modelos: ['Dragão', 'Inferno M2', 'Fornalha', 'Pira'] },
+  lancagranadas: { nome: 'Lança-granadas', slot: 'primaria', dano: 170, rpm: 80, auto: false, pente: 6, recarga: 3.6, disp: 0.01, alcance: 60, projeteis: 1, recuo: 0.08, zoom: 1.3, lenta: 0.9, especial: 'lanca', slotsMod: ['mira', 'carregador', 'empunhadura'], modelos: ['M32', 'China Lake', 'Trovão', 'RG-6'] },
+  besta:        { nome: 'Besta',          slot: 'secundaria', dano: 140, rpm: 55, auto: false, pente: 1, recarga: 1.3, disp: 0.004, alcance: 90, projeteis: 1, recuo: 0.03, zoom: 1.8, silencioso: true, perfuraBase: 2, slotsMod: ['mira', 'empunhadura', 'municao'], modelos: ['Caçadora', 'Escorpião', 'Silêncio', 'Ballista'] },
   metralhadora: { nome: 'Metralhadora',   slot: 'primaria',   dano: 22, rpm: 760, auto: true,  pente: 100, recarga: 4.2, disp: 0.042, alcance: 60, projeteis: 1, recuo: 0.012, zoom: 1.4, lenta: 0.85, modelos: ['M249', 'PKM', 'Minimi', 'RPK'] },
 };
 
@@ -88,11 +91,15 @@ export const MODS = [
 ];
 export const MOD_POR_ID = Object.fromEntries(MODS.map(m => [m.id, m]));
 export function modCabe(mod, arma) {
+  const sm = TIPOS[arma.tipo] && TIPOS[arma.tipo].slotsMod;
+  if (sm && !sm.includes(mod.slot)) return false;
   if (mod.so && !mod.so.includes(arma.tipo)) return false;
   if (mod.nao && mod.nao.includes(arma.tipo)) return false;
   return true;
 }
 export function slotLiberado(arma, slotId) {
+  const sm = TIPOS[arma.tipo] && TIPOS[arma.tipo].slotsMod;
+  if (sm && !sm.includes(slotId)) return false;
   const s = SLOTS_MOD.find(x => x.id === slotId);
   return maestria(arma).nivel >= s.nivel;
 }
@@ -163,31 +170,31 @@ export const ZONAS = [
     eventos: ['horda', 'apagao'], objetivo: { tipo: 'gerador', nome: 'Geradores', qtd: 2, cofre: 'Abrigo Antiaéreo' },
     neblina: 0x1b2530, chao: '#3a3f44', ceu: 0x0b1018, luz: 0x8fa8ff,
     loot: [60, 28, 9, 2.5, 0.45, 0.05], chefes: ['acougueiro'],
-    pool: { errante: [1, 1, 0], corredor: [2, 0.3, 0.05], rastejante: [2, 0.2, 0.03], cuspidor: [3, 0.2, 0], inchado: [3, 0.15, 0], blindado: [4, 0.1, 0.03], bruto: [4, 0.07, 0.01] } },
+    pool: { errante: [1, 1, 0], corredor: [2, 0.3, 0.05], rastejante: [2, 0.2, 0.03], cuspidor: [3, 0.2, 0], inchado: [3, 0.15, 0], blindado: [4, 0.1, 0.03], bruto: [4, 0.07, 0.01], escalador: [3, 0.1, 0.02] } },
   { id: 'centro', nivelRec: 3, nome: 'Centro em Chamas', dif: 1.6, ondas: 7, recompensa: 1.8, tam: 64,
     descricao: 'Arranha-céus, avenida engarrafada, posto de gasolina, viaduto e metrô. Carros pegando fogo, escudeiros e gritadores.',
     eventos: ['horda', 'bombardeio'], objetivo: { tipo: 'valvula', nome: 'Válvulas de gás', qtd: 3, cofre: 'Cofre do Banco' },
     neblina: 0x2a1812, chao: '#34302d', ceu: 0x170a06, luz: 0xffa070,
     loot: [35, 35, 18, 8, 3.5, 0.5], chefes: ['chefe'],
-    pool: { errante: [1, 1, 0], corredor: [1, 0.4, 0.05], rastejante: [2, 0.2, 0.02], cuspidor: [2, 0.2, 0], inchado: [3, 0.18, 0], escudeiro: [3, 0.15, 0.02], blindado: [3, 0.12, 0.03], gritador: [4, 0.08, 0.01], toxico: [5, 0.1, 0.02], bruto: [4, 0.08, 0.01] } },
+    pool: { errante: [1, 1, 0], corredor: [1, 0.4, 0.05], rastejante: [2, 0.2, 0.02], cuspidor: [2, 0.2, 0], inchado: [3, 0.18, 0], escudeiro: [3, 0.15, 0.02], blindado: [3, 0.12, 0.03], gritador: [4, 0.08, 0.01], toxico: [5, 0.1, 0.02], bruto: [4, 0.08, 0.01], escalador: [3, 0.15, 0.02], agarrador: [4, 0.08, 0.01] } },
   { id: 'lab', nivelRec: 6, nome: 'Laboratório X-13', dif: 2.4, ondas: 10, recompensa: 3.0, tam: 60,
     descricao: 'Complexo fechado: corredores, salas de contenção, geradores e portas de segurança. Espectros invisíveis e dois chefes no final.',
     eventos: ['apagao', 'esporos'], objetivo: { tipo: 'terminal', nome: 'Terminais de acesso', qtd: 3, cofre: 'Sala de Armas X-13' },
     neblina: 0x0d2216, chao: '#2c3530', ceu: 0x03100a, luz: 0x70ffa0,
     loot: [10, 30, 30, 18, 9, 3], chefes: ['chefe', 'acougueiro'],
-    pool: { errante: [1, 0.8, 0], corredor: [1, 0.4, 0.04], espectro: [2, 0.15, 0.03], toxico: [3, 0.15, 0.02], cuspidor: [2, 0.2, 0], inchado: [2, 0.15, 0], gritador: [3, 0.1, 0.01], escudeiro: [4, 0.12, 0.02], blindado: [3, 0.15, 0.03], bruto: [3, 0.1, 0.01], rastejante: [2, 0.2, 0.02] } },
+    pool: { errante: [1, 0.8, 0], corredor: [1, 0.4, 0.04], espectro: [2, 0.15, 0.03], toxico: [3, 0.15, 0.02], cuspidor: [2, 0.2, 0], inchado: [2, 0.15, 0], gritador: [3, 0.1, 0.01], escudeiro: [4, 0.12, 0.02], blindado: [3, 0.15, 0.03], bruto: [3, 0.1, 0.01], rastejante: [2, 0.2, 0.02], agarrador: [3, 0.1, 0.02], ninhada: [5, 0.06, 0.01] } },
   { id: 'base', nivelRec: 10, nome: 'Base Militar Caída', dif: 3.2, ondas: 10, recompensa: 4.5, requer: 'lab', tam: 76,
     descricao: 'Fortaleza murada com torres de vigia, hangares, tanques, pista de pouso e paiol. O Colosso Blindado guarda a base.',
     eventos: ['bombardeio', 'horda'], objetivo: { tipo: 'radio', nome: 'Rádios de comando', qtd: 2, cofre: 'Paiol de Armas' },
     neblina: 0x1c1f14, chao: '#3a3a2c', ceu: 0x0a0c06, luz: 0xd8e090,
     loot: [0, 22, 34, 25, 14, 5], chefes: ['colosso'],
-    pool: { errante: [1, 0.5, 0], blindado: [1, 0.5, 0.05], escudeiro: [1, 0.35, 0.04], corredor: [1, 0.3, 0.03], gritador: [2, 0.1, 0.01], bruto: [2, 0.15, 0.02], inchado: [2, 0.15, 0], toxico: [4, 0.1, 0.02], espectro: [5, 0.1, 0.02] } },
+    pool: { errante: [1, 0.5, 0], blindado: [1, 0.5, 0.05], escudeiro: [1, 0.35, 0.04], corredor: [1, 0.3, 0.03], gritador: [2, 0.1, 0.01], bruto: [2, 0.15, 0.02], inchado: [2, 0.15, 0], toxico: [4, 0.1, 0.02], espectro: [5, 0.1, 0.02], escalador: [2, 0.2, 0.03], agarrador: [3, 0.1, 0.02] } },
   { id: 'ninho', nivelRec: 14, nome: 'Ninho da Rainha', dif: 4.2, ondas: 12, recompensa: 6.5, requer: 'base', tam: 66,
     descricao: 'Caverna viva de carne e ovos pulsantes, piscinas de ácido e túneis. Gás tóxico, espectros e a Rainha Infectada.',
     eventos: ['esporos', 'horda'], objetivo: { tipo: 'casulo', nome: 'Casulos', qtd: 4, cofre: 'Câmara Real' },
     neblina: 0x2e1236, chao: '#2e2430', ceu: 0x0c0310, luz: 0xd080ff,
     loot: [0, 10, 30, 32, 20, 8], chefes: ['rainha'],
-    pool: { errante: [1, 0.4, 0], rastejante: [1, 0.5, 0.04], espectro: [1, 0.3, 0.04], toxico: [1, 0.3, 0.03], cuspidor: [1, 0.3, 0.02], inchado: [1, 0.25, 0.01], gritador: [2, 0.12, 0.01], blindado: [2, 0.25, 0.03], escudeiro: [3, 0.2, 0.02], bruto: [3, 0.15, 0.02] } },
+    pool: { errante: [1, 0.4, 0], rastejante: [1, 0.5, 0.04], espectro: [1, 0.3, 0.04], toxico: [1, 0.3, 0.03], cuspidor: [1, 0.3, 0.02], inchado: [1, 0.25, 0.01], gritador: [2, 0.12, 0.01], blindado: [2, 0.25, 0.03], escudeiro: [3, 0.2, 0.02], bruto: [3, 0.15, 0.02], ninhada: [1, 0.15, 0.02], escalador: [2, 0.2, 0.02], agarrador: [3, 0.1, 0.02] } },
 ];
 
 // Eventos aleatórios que mudam uma onda (mais recompensa)
@@ -232,6 +239,12 @@ export const ZUMBIS = {
     desc: 'Solta nuvens de gás venenoso por onde passa.', dica: 'Não fique parado no gás verde. Mate de longe.' },
   bruto:    { nome: 'Brutamontes', hp: 650, vel: 1.6, dano: 30, raio: 0.75, escala: 1.6, grana: 60, pele: 0x5a6a5a, olho: 0xff5020,
     desc: 'Enorme e resistente. Bate muito forte.', dica: 'Mantenha distância e descarregue o pente.' },
+  escalador: { nome: 'Escalador', hp: 90, vel: 3.6, dano: 11, raio: 0.38, escala: 0.94, grana: 22, pele: 0x8a8a6a, olho: 0xffe040,
+    desc: 'Sobe em carros, caixas e torres. Nenhum lugar alto é seguro.', dica: 'Mate antes que ele chegue ao seu esconderijo.' },
+  agarrador: { nome: 'Agarrador', hp: 210, vel: 2.4, dano: 6, raio: 0.48, escala: 1.08, grana: 34, pele: 0x7a6a5a, olho: 0xff6020,
+    desc: 'Segura você e não solta: você fica quase parado levando dano.', dica: 'Use o facão ou a esquiva para se soltar.' },
+  ninhada: { nome: 'Mãe-Ninhada', hp: 260, vel: 1.7, dano: 14, raio: 0.6, escala: 1.12, grana: 38, pele: 0x9a7a9a, olho: 0xd060ff,
+    desc: 'Carrega a ninhada na barriga: quando morre, solta vários rastejantes.', dica: 'Mate de longe e tenha munição para a ninhada.' },
   // ----- chefes -----
   acougueiro: { nome: 'Açougueiro', boss: true, hp: 3800, vel: 2.6, dano: 35, raio: 0.9, escala: 1.9, grana: 500, pele: 0x9a7a6a, olho: 0xff2a00,
     desc: 'Chefe. Avança em investidas com o cutelo.', dica: 'Saia da frente quando ele brilhar. Se ele bater numa parede, fica tonto e leva mais dano.' },
@@ -320,7 +333,7 @@ export const PERICIAS = [
 export function xpProximo(nivel) { return Math.round(250 * Math.pow(nivel, 1.35)); }
 
 // ---------- missões (contratos) ----------
-const ALVOS_MISSAO = ['errante', 'corredor', 'rastejante', 'cuspidor', 'inchado', 'blindado', 'escudeiro', 'gritador', 'espectro', 'toxico', 'bruto'];
+const ALVOS_MISSAO = ['errante', 'corredor', 'rastejante', 'cuspidor', 'inchado', 'blindado', 'escudeiro', 'gritador', 'espectro', 'toxico', 'bruto', 'escalador', 'agarrador', 'ninhada'];
 export function gerarMissao(save) {
   const lib = ZONAS.filter(z => zonaLiberada(save, z));
   const nivel = save.nivel || 1;
@@ -397,12 +410,13 @@ export function stats(arma, modExtra) {
     zoom: b.zoom + fx.zoom,
     lenta: (b.lenta || 1) * fx.lenta,
     ads: fx.ads,
-    perfura: Math.max(0, (i >= 4 ? 2 : i >= 2 ? 1 : 0) + fx.perfura),
+    perfura: Math.max(0, (i >= 4 ? 2 : i >= 2 ? 1 : 0) + fx.perfura + (b.perfuraBase || 0)),
+    especial: b.especial || null,
     fogo: i >= 3 || !!fx.fogo,
     explosivo: i >= 5 || !!fx.explosivo,
     vampiro: (i >= 5 ? 0.05 : 0) + fx.vampiro,
     eletrico: !!fx.eletrico,
-    silencioso: !!fx.silencioso,
+    silencioso: !!fx.silencioso || !!b.silencioso,
     termico: !!fx.termico,
     maestria: ms.nivel,
   };

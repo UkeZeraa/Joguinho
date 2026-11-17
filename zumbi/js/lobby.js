@@ -259,7 +259,7 @@ function vitrine(a, slot) {
     <div class="modSlots">${SLOTS_MOD.map(sl => {
       const lib = slotLiberado(a, sl.id), id = a.mods && a.mods[sl.id], m = id && MOD_POR_ID[id];
       return `<button class="modSlot ${lib ? '' : 'bloq'} ${modSlotFoco === sl.id ? 'foco' : ''}" data-mslot="${sl.id}" ${m ? `style="--cor:${TIERS[m.tier].cor}"` : ''}>
-        <i>${sl.icone}</i><span>${sl.nome}</span><b>${lib ? (m ? m.nome : 'Vazio') : '🔒 Maestria ' + sl.nivel}</b></button>`;
+        <i>${sl.icone}</i><span>${sl.nome}</span><b>${lib ? (m ? m.nome : 'Vazio') : (TIPOS[a.tipo].slotsMod && !TIPOS[a.tipo].slotsMod.includes(sl.id)) ? '— não usa' : '🔒 Maestria ' + sl.nivel}</b></button>`;
     }).join('')}</div>
     <div class="camoSel">${CAMOS.map(c => `<button title="${c.nome}${save.camos.includes(c.id) ? '' : ' (compre na Loja)'}" data-camo="${c.id}" class="${a.camo === c.id ? 'on' : ''} ${save.camos.includes(c.id) ? '' : 'bloq'}" style="background:${c.cor}"></button>`).join('')}</div>
     <div style="margin-top:12px;display:flex;gap:8px">
@@ -267,6 +267,7 @@ function vitrine(a, slot) {
     </div>`;
   info.querySelectorAll('[data-mslot]').forEach(b => b.addEventListener('click', () => {
     const sl = b.dataset.mslot;
+    if (TIPOS[a.tipo].slotsMod && !TIPOS[a.tipo].slotsMod.includes(sl)) return aviso(`${TIPOS[a.tipo].nome} não usa este acessório`);
     if (!slotLiberado(a, sl)) return aviso(`Slot liberado na Maestria ${SLOTS_MOD.find(x => x.id === sl).nivel} (mate zumbis com esta arma)`);
     modSlotFoco = modSlotFoco === sl ? null : sl; som.clique(); renderEquip();
   }));
