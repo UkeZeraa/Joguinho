@@ -161,6 +161,9 @@ const TIROS = {
   escopeta:        () => { noise(0.45, 1200, 0.9); tom('sawtooth', 110, 30, 0.2, 0.45); },
   sniper:          () => { noise(0.7, 1500, 1.0); tom('sawtooth', 90, 25, 0.35, 0.5); noise(1.2, 400, 0.25); },
   metralhadora:    () => { noise(0.16, 1800, 0.55); tom('sawtooth', 140, 40, 0.08, 0.3); },
+  lancachamas:     () => { noise(0.09, 600, 0.22, 'lowpass'); noise(0.06, 2400, 0.06, 'bandpass', 1.2); },
+  lancagranadas:   () => { tom('sine', 220, 70, 0.16, 0.45); noise(0.22, 450, 0.45); },
+  besta:           () => { noise(0.08, 3200, 0.22, 'highpass'); tom('triangle', 320, 110, 0.12, 0.22); },
 };
 const TIROS_ABAFADOS = {
   pistola:         () => { noise(0.12, 900, 0.22); tom('square', 140, 60, 0.05, 0.06); },
@@ -169,6 +172,9 @@ const TIROS_ABAFADOS = {
   escopeta:        () => { noise(0.3, 600, 0.35); tom('sawtooth', 90, 35, 0.12, 0.14); },
   sniper:          () => { noise(0.35, 700, 0.4); tom('sawtooth', 80, 30, 0.18, 0.15); },
   metralhadora:    () => { noise(0.1, 800, 0.2); },
+  lancachamas:     () => { noise(0.09, 600, 0.22, 'lowpass'); },
+  lancagranadas:   () => { tom('sine', 220, 70, 0.16, 0.45); noise(0.22, 450, 0.45); },
+  besta:           () => { noise(0.07, 3000, 0.16, 'highpass'); tom('triangle', 300, 110, 0.12, 0.18); },
 };
 
 // ---------------------------------------------------------------- falas (HUD + áudio)

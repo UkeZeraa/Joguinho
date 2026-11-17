@@ -736,7 +736,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
 
   // ---------- zumbis ----------
   const zumbis = [];
-  function spawnZumbi(tipo, pos, eliteForcado) {
+  function spawnZumbi(tipo, pos, eliteForcado, mini) {
     let x = 0, z = 0, ok = false;
     if (pos) {
       for (let t = 0; t < 12 && !ok; t++) {
@@ -753,8 +753,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     if (!ok) return null;
     const def = ZUMBIS[tipo];
     const chanceElite = mod.has('elite') ? 0.2 : zona.dif >= 3 ? 0.05 : onda >= 3 ? 0.02 : 0;
-    const elite = !def.boss && (eliteForcado || Math.random() < chanceElite);
+    const elite = !def.boss && !mini && (eliteForcado || Math.random() < chanceElite);
     const g = criarZumbi(tipo, { elite });
+    if (mini) g.scale.multiplyScalar(1.35);
     g.position.set(x, 0, z);
     cena.add(sombra(g, false));
     const escalaOnda = 1 + 0.1 * (Math.min(onda, 30) - 1) + (sobrevivencia ? 0.04 * Math.max(0, onda - 10) : 0);
@@ -774,6 +775,14 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       escudo: (def.escudo || 0) * forca, buff: 0, revelado: 0, cdGrito: rand(3, 5), cdGas: rand(1, 3),
       ia: 'normal', iaT: 0, cdEsp: rand(3, 5), dir: { x: 0, z: 0 }, fase2: false, invocou: 0, tonto: 0, surgir: pos && !def.boss ? 1.1 : 0, ultimaArma: null,
     };
+    if (mini) {
+      zb.mini = true; zb.hp = zb.hpMax = zb.hp * 7; zb.dano *= 1.5; zb.vel *= 1.05; zb.raio *= 1.3;
+      zb.nomeMini = def.nome + ' Alfa';
+      zb.armadura *= 2; zb.escudo *= 2;
+      som.rugido(); tremor = 0.4;
+      anunciar(`MINI-CHEFE: ${zb.nomeMini.toUpperCase()}!`, '#ff8a40', 3);
+      feed(`Dica: ${def.dica}`, '#ffb070');
+    }
     if (mod.has('blindagem') && !zb.armadura && !def.boss) zb.armadura = 90 * forca;
     zb.armaduraMax = zb.armadura;
     zumbis.push(zb);
@@ -926,6 +935,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       if (n >= 20) chefes.push(lista[(n / 5) % lista.length]);
     }
     chefes.forEach((c, i) => f.splice(Math.floor(f.length * (0.3 + 0.3 * i)), 0, c));
+    if (n >= 3 && !chefes.length && Math.random() < 0.3) f.splice(Math.floor(f.length * rand(0.3, 0.7)), 0, 'mini');
     return f;
   }
 
@@ -1096,6 +1106,8 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     sangue(z.x, 1.2 * z.escala, z.z, 14, z.tipo === 'toxico' || z.tipo === 'cuspidor' ? 0x6aaa20 : 0x8a0a0a);
     if (z.tipo === 'inchado') explodir(z.x, 1, z.z, 4.5, z.dano * 1.4, 'zumbi');
     if (z.tipo === 'toxico') criarNuvem(z.x, z.z, 3.5, 12, 8);
+    if (z.tipo === 'ninhada') { sangue(z.x, 1, z.z, 20, 0xb070d0); som.cuspe(); for (let k = 0; k < (z.mini ? 7 : 4); k++) setTimeout(() => !acabou && spawnZumbi('rastejante', { x: z.x, z: z.z }), k * 120); }
+    if (z.agarrando) soltarAgarre();
     // drops
     const sorte = 1 + 0.15 * nv('sorte');
     const r = Math.random();
@@ -1108,6 +1120,14 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       if (!zumbis.some(o => o.vivo && o.def.boss)) hud.bossBar.style.display = 'none';
       anunciar(`${z.def.nome.toUpperCase()} DERROTADO!`, '#ffd020');
       som.raro(); falar('chefe_morto', true);
+    } else if (z.mini) {
+      placar.minis = (placar.minis || 0) + 1; placar.xp += 250;
+      soltarLoot('arma', z.x, z.z, novaArma(null, Math.min(5, rolarTier(zona.loot) + 1)));
+      soltarLoot('mod', z.x + 1, z.z + 1, rolarMod(1));
+      for (let i = 0; i < 3; i++) soltarLoot('grana', z.x + rand(-2, 2), z.z + rand(-2, 2), Math.round(60 * recompensa));
+      if (!zumbis.some(o => o.vivo && (o.def.boss || o.mini))) hud.bossBar.style.display = 'none';
+      anunciar(`${z.nomeMini.toUpperCase()} DERROTADO!`, '#ffb040', 2.5);
+      som.raro();
     } else if (z.elite) {
       soltarLoot('arma', z.x, z.z, novaArma(null, Math.min(5, rolarTier(zona.loot) + 1)));
     } else if (r < (z.tipo === 'bruto' ? 0.25 : ['blindado', 'escudeiro', 'gritador', 'espectro', 'toxico'].includes(z.tipo) ? 0.08 : 0.035) * sorte) {
@@ -1117,6 +1137,24 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     else if (r < 0.32) soltarLoot('grana', z.x, z.z, Math.round(rand(15, 40) * recompensa));
   }
 
+  let agarre = null;
+  function soltarAgarre(msg) {
+    if (!agarre) return;
+    agarre.z.agarrando = false; agarre.z.cdAgarre = 5; agarre.z.cdAtaque = 1;
+    agarre = null;
+    if (msg) feed(msg, '#9fe8b0');
+  }
+  function atualizarAgarre(dt) {
+    if (!agarre) return;
+    const z = agarre.z;
+    agarre.t -= dt;
+    if (!z.vivo || jog.morto || agarre.t <= 0 || z.hp < agarre.hp0 - z.hpMax * 0.25) { soltarAgarre(z.vivo && !jog.morto ? 'Você se soltou!' : null); return; }
+    const dx = z.x - jog.x, dz = z.z - jog.z, d = Math.hypot(dx, dz) || 1;
+    if (d > 0.9) { jog.x += dx / d * dt * 1.2; jog.z += dz / d * dt * 1.2; }
+    agarre.tick = (agarre.tick || 0) - dt;
+    if (agarre.tick <= 0) { agarre.tick = 0.5; danoJogador(z.dano * 1.4, true, z); flashDano = Math.min(1, flashDano + 0.2); }
+  }
+  let explodirArma = null;
   function explodir(x, y, z, raio, dano, origem) {
     bolaFogo(x, y, z, raio);
     som.explosao();
@@ -1128,8 +1166,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       const d = Math.hypot(zb.x - x, zb.z - z);
       if (d < raio + zb.raio) danoZumbi(zb, dano * (1 - 0.6 * d / (raio + zb.raio)) * (origem === 'zumbi' ? 0.5 : 1), false, zb.x, 1.4 * zb.escala, zb.z, 'explosao');
     }
+    if (origem === 'lanca' && explodirArma) for (const zb of zumbis) if (zb.vivo && Math.hypot(zb.x - x, zb.z - z) < raio + zb.raio) zb.ultimaArma = explodirArma;
     if (origem === 'mina') for (const zb of zumbis) if (zb.vivo && Math.hypot(zb.x - x, zb.z - z) < raio + zb.raio) zb.porGadget = true;
-    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' || origem === 'mina' ? 0.5 : 1), false, { x, z });
+    if (origem !== 'bala' && dj < raio) danoJogador(dano * (1 - 0.7 * dj / raio) * (origem === 'granada' || origem === 'mina' || origem === 'lanca' ? 0.5 : 1), false, { x, z });
     for (const q of quebraveis) {
       if (q.hp > 0 && !q.estourado && Math.hypot((q.minx + q.maxx) / 2 - x, (q.minz + q.maxz) / 2 - z) < raio) {
         q.hp = 0;
@@ -1202,7 +1241,14 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     const movendo = Math.hypot(mov.x, mov.z) > 0.1;
     let disp = st.disp * (1 - mira * 0.7) * (movendo ? 1.5 : 1) * (1 + Math.min(abrirFogo, 1) * 0.8);
     if (a.def.tipo === 'sniper' && mira < 0.9) disp = 0.06;
-    for (let p = 0; p < st.projeteis; p++) {
+    if (st.especial === 'chamas') atirarChamas(a, st);
+    else if (st.especial === 'lanca') {
+      camera.getWorldDirection(dirTiro);
+      const m = new THREE.Mesh(geoEsf, matGranada); m.scale.set(0.06, 0.06, 0.1);
+      projeteis.push({ tipo: 'granadaL', m, x: pontaW.x, y: pontaW.y, z: pontaW.z, vx: dirTiro.x * 30, vy: dirTiro.y * 30 + 1.2, vz: dirTiro.z * 30, t: 3, arma: a, dano: st.dano });
+      m.position.copy(pontaW); cena.add(m);
+    }
+    for (let p = 0; p < (st.especial ? 0 : st.projeteis); p++) {
       camera.getWorldDirection(dirTiro);
       dirTiro.x += rand(-disp, disp); dirTiro.y += rand(-disp, disp); dirTiro.z += rand(-disp, disp);
       dirTiro.normalize();
@@ -1215,11 +1261,38 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     luzTiro.intensity = st.silencioso ? 2 : 14;
     vmLuzTiro.intensity = st.silencioso ? 0.8 : 4;
     ultimoTiro = tempo;
-    marcas.fumaca(pontaW.x, pontaW.y, pontaW.z, a.def.tipo === 'escopeta' || a.def.tipo === 'sniper' ? 0.7 : 0.35);
-    if (a.def.tipo === 'escopeta') setTimeout(() => !acabou && ejetarCapsula(true), 280); else ejetarCapsula(false);
+    if (st.especial !== 'chamas') marcas.fumaca(pontaW.x, pontaW.y, pontaW.z, a.def.tipo === 'escopeta' || a.def.tipo === 'sniper' || st.especial ? 0.7 : 0.35);
+    if (a.def.tipo === 'escopeta') setTimeout(() => !acabou && ejetarCapsula(true), 280); else if (!st.especial && a.def.tipo !== 'besta') ejetarCapsula(false);
     som.tiro(a.def.tipo, a.def.tier >= 5, st.silencioso);
     atualizarHudArma();
     if (a.pente === 0 && a.reserva > 0) setTimeout(() => { if (!acabou) recarregar(); }, 200);
+  }
+
+  // lança-chamas: cone curto que incendeia tudo à frente (o fogo ignora armadura)
+  function atirarChamas(a, st) {
+    camera.getWorldDirection(dirTiro);
+    const hx = dirTiro.x, hz = dirTiro.z, hl = Math.hypot(hx, hz) || 1;
+    for (const z of zumbis) {
+      if (!z.vivo) continue;
+      const dx = z.x - jog.x, dz = z.z - jog.z, d = Math.hypot(dx, dz);
+      if (d > st.alcance + z.raio) continue;
+      if (d > 1.4 && (dx * hx + dz * hz) / (d * hl) < 0.9) continue;
+      if (!visivel(jog.x, jog.y + 1.2, jog.z, z.x, 1.0 * z.escala, z.z)) continue;
+      z.ultimaArma = a;
+      z.fogo = Math.max(z.fogo, 2.5); z.fogoDps = Math.max(z.fogoDps, st.dano * 6);
+      danoZumbi(z, st.dano, false, z.x, 1.2 * z.escala, z.z, 'fogo');
+      hitmarker = 0.06; hitCabeca = false;
+    }
+    for (const q of quebraveis) {
+      if (q.estourado || !q.cfg) continue;
+      const cx = (q.minx + q.maxx) / 2, cz = (q.minz + q.maxz) / 2, d = Math.hypot(cx - jog.x, cz - jog.z);
+      if (d < st.alcance && (cx - jog.x) * hx + (cz - jog.z) * hz > d * hl * 0.9) { q.hp -= st.dano * 0.5; if (q.hp <= 0) quebrar(q); }
+    }
+    for (let k = 0; k < 3; k++) {
+      const v = rand(9, 14);
+      particula(pontaW.x, pontaW.y, pontaW.z, dirTiro.x * v + rand(-1.4, 1.4), dirTiro.y * v + rand(-0.6, 1.2), dirTiro.z * v + rand(-1.4, 1.4), rand(0.35, 0.6), rand(0.12, 0.26), Math.random() < 0.55 ? 0xff7a18 : Math.random() < 0.5 ? 0xffc030 : 0xff3a10, -3);
+    }
+    luzTiro.intensity = 10;
   }
 
   function tiroRaio(a, st, o, d, principal) {
@@ -1363,6 +1436,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       const dano = 95 * (1 + 0.4 * nv('facao')) * (1 + 0.04 * Math.min(onda, 20));
       danoZumbi(z, dano, false, z.x, 1.3 * z.escala, z.z, 'faca', { x: dx / d, z: dz / d });
       sangue(z.x, 1.1 * z.escala, z.z, 10);
+      if (agarre && agarre.z === z) soltarAgarre('Você se soltou com o facão!');
       if (z.vivo && !z.def.boss) { z.x += dx / d * 1.2; z.z += dz / d * 1.2; colidir(z, z.raio); z.ataque = 0; z.cdAtaque = 0.9; }
       acertou = true;
     }
@@ -1371,6 +1445,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
 
   // ---------- esquiva ----------
   function esquivar() {
+    if (agarre && jog.cdEsq <= 0) soltarAgarre('Esquivou do agarre!');
     if (jog.cdEsq > 0 || jog.morto || pausado) return;
     let dx = mov.x, dz = mov.z;
     if (Math.hypot(dx, dz) < 0.1) { dx = -Math.sin(jog.yaw); dz = -Math.cos(jog.yaw); }
@@ -2189,7 +2264,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
     const mag = Math.hypot(f, s);
     if (mag > 1) { f /= mag; s /= mag; }
     correndo = (teclas.ShiftLeft || teclas.ShiftRight || (mobile && Math.hypot(joy.dx, joy.dy) > 0.95)) && f > 0.5 && !gatilho && mira < 0.2;
-    let vel = 5.2 * st.lenta * (correndo ? 1.45 : 1) * (1 - mira * 0.4) * (jog.curando > 0 ? 0.6 : 1) * (1 + 0.04 * nv('velocidade')) * bonus.vel;
+    let vel = 5.2 * st.lenta * (correndo ? 1.45 : 1) * (1 - mira * 0.4) * (jog.curando > 0 ? 0.6 : 1) * (1 + 0.04 * nv('velocidade')) * bonus.vel * (agarre ? 0.12 : 1);
     const sy = Math.sin(jog.yaw), cy = Math.cos(jog.yaw);
     mov.x = (-sy * f + cy * s) * vel;
     mov.z = (-cy * f - sy * s) * vel;
@@ -2288,7 +2363,7 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
         continue;
       }
       vivos++;
-      if (z.def.boss && (!chefeVivo || z.hp / z.hpMax < chefeVivo.hp / chefeVivo.hpMax)) chefeVivo = z;
+      if ((z.def.boss || z.mini) && (!chefeVivo || (z.def.boss && !chefeVivo.def.boss) || z.hp / z.hpMax < chefeVivo.hp / chefeVivo.hpMax)) chefeVivo = z;
       const dx = jog.x - z.x, dz = jog.z - z.z, dist = Math.hypot(dx, dz);
       let mx = 0, mz = 0;
       const alcance = z.raio + RAIO_JOG + 0.45;
@@ -2357,9 +2432,11 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       }
       const andando = Math.hypot(mx, mz) > 0.05;
       const v = z.vel * (z.ataque > 0 ? 0.3 : 1) * (z.buff > 0 ? 1.4 : 1) * (z.surgir > 0 ? 0.15 : 1);
-      z.x += mx * v * dt; z.z += mz * v * dt;
-      colidir(z, z.raio);
-      z.g.position.set(z.x, 0, z.z);
+      if (z.tipo === 'escalador' && dist < 16 && !jog.morto && !ctrl) { mx = dx / dist; mz = dz / dist; }
+      z.x += mx * v * dt * (z.agarrando ? 0 : 1); z.z += mz * v * dt * (z.agarrando ? 0 : 1);
+      if (z.tipo === 'escalador') { colidir(z, z.raio, 3.6); const alvoY = alturaChao(z.x, z.z, z.raio, 3.6); z.y = (z.y || 0) + (alvoY - (z.y || 0)) * Math.min(1, dt * 6); }
+      else colidir(z, z.raio);
+      z.g.position.set(z.x, z.y || 0, z.z);
       if (z.surgir > 0) { z.surgir -= dt; z.g.position.y = -1.5 * Math.min(1, z.surgir); }
       const yawAlvo = z.ia === 'carga' || z.ia === 'prep' && z.iaT <= 0.3 ? Math.atan2(-z.dir.x, -z.dir.z) : ctrl && (ctrl.mx || ctrl.mz) && z.tipo === 'gritador' ? Math.atan2(-mx, -mz) : Math.atan2(-dx, -dz);
       let dy = yawAlvo - z.yaw;
@@ -2371,12 +2448,18 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       // ataque corpo a corpo
       z.cdAtaque -= dt;
       if (z.tipo === 'inchado' && dist < 1.9 && !jog.morto) { z.hp = 0; matar(z, false); continue; }
-      if (dist < alcance && z.cdAtaque <= 0 && z.ataque <= 0 && !jog.morto && z.ia === 'normal' && z.tonto <= 0 && !(z.surgir > 0)) z.ataque = 0.45;
+      const mesmaAltura = Math.abs(jog.y - (z.y || 0)) < 1.6;
+      if (z.tipo === 'agarrador' && dist < alcance && mesmaAltura && !jog.morto && !z.agarrando && (z.cdAgarre || 0) <= 0 && jog.invul <= 0 && !agarre) {
+        z.agarrando = true; agarre = { z, t: 2.6, hp0: z.hp };
+        anunciar('AGARRADO! Facão (V) ou esquiva (C)', '#ff6040', 1.6); som.investida(); tremor = Math.max(tremor, 0.3);
+      }
+      z.cdAgarre = (z.cdAgarre || 0) - dt;
+      if (dist < alcance && mesmaAltura && z.cdAtaque <= 0 && z.ataque <= 0 && !jog.morto && z.ia === 'normal' && z.tonto <= 0 && !(z.surgir > 0) && !z.agarrando) z.ataque = 0.45;
       if (z.ataque > 0) {
         z.ataque -= dt;
         if (z.ataque <= 0) {
           z.cdAtaque = z.tipo === 'corredor' ? 0.7 : 1.1;
-          if (dist < alcance + 0.4) danoJogador(z.dano * (z.buff > 0 ? 1.3 : 1), false, z);
+          if (dist < alcance + 0.4 && Math.abs(jog.y - (z.y || 0)) < 1.8) danoJogador(z.dano * (z.buff > 0 ? 1.3 : 1), false, z);
           if (Math.random() < 0.25) som.zumbiAtaque(dist, 0);
         }
       }
@@ -2430,11 +2513,13 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       hud.bossFill.style.width = (chefeVivo.hp / chefeVivo.hpMax * 100) + '%';
       hud.bossArm.style.width = chefeVivo.armaduraMax ? (Math.max(0, chefeVivo.armadura) / chefeVivo.armaduraMax * 100) + '%' : '0%';
       hud.bossArm.parentElement.style.display = chefeVivo.armaduraMax ? '' : 'none';
-      if (hud.bossNome.textContent !== chefeVivo.def.nome.toUpperCase()) hud.bossNome.textContent = chefeVivo.def.nome.toUpperCase();
+      const nomeB = (chefeVivo.nomeMini || chefeVivo.def.nome).toUpperCase();
+      if (hud.bossNome.textContent !== nomeB) hud.bossNome.textContent = nomeB;
     }
     atualizarInteracao(dt);
     atualizarEvento(dt);
     atualizarGadgets(dt);
+    atualizarAgarre(dt);
     atualizarTorretas(dt);
     atualizarNuvens(dt);
     atualizarChoques(dt);
@@ -2447,7 +2532,13 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       p.vy -= (p.tipo === 'granada' ? 20 : 9) * dt;
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       let remover = false;
-      if (p.tipo === 'molotov') {
+      if (p.tipo === 'granadaL') {
+        let bateu = p.y < 0.1 || p.t <= 0;
+        for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) bateu = true;
+        for (const z of zumbis) if (z.vivo && Math.hypot(z.x - p.x, z.z - p.z) < z.raio + 0.3 && p.y < z.corpoAlt * z.escala + 0.3) bateu = true;
+        if (Math.random() < 0.8) particula(p.x, p.y, p.z, 0, 0.5, 0, 0.4, 0.07, 0xb0b0b0, -0.5);
+        if (bateu) { remover = true; explodirArma = p.arma; explodir(p.x, Math.max(0.3, p.y), p.z, 4.6, p.dano, 'lanca'); explodirArma = null; }
+      } else if (p.tipo === 'molotov') {
         let quebrou = p.y < 0.1 || p.t <= 0;
         for (const b of obst) if (p.x > b.minx && p.x < b.maxx && p.z > b.minz && p.z < b.maxz && p.y < b.h) quebrou = true;
         if (Math.random() < 0.5) particula(p.x, p.y, p.z, 0, 0, 0, 0.25, 0.06, 0xff8a20, 0);
@@ -2547,7 +2638,9 @@ export function iniciarRaid({ canvas, zona, loadout, opcoes, mobile, onFim, modo
       timerSpawn -= dt;
       const maxVivos = Math.min(30, 12 + onda * 1.5) + (evento && evento.id === 'horda' ? 6 : 0);
       if (filaSpawn.length && timerSpawn <= 0 && vivos < maxVivos) {
-        spawnZumbi(filaSpawn.shift());
+        const prox = filaSpawn.shift();
+        if (prox === 'mini') { const op = ['bruto', 'blindado', 'escudeiro', 'agarrador', 'escalador', 'toxico', 'ninhada'].filter(t => ZUMBIS[t]); spawnZumbi(escolher(op), null, false, true); }
+        else spawnZumbi(prox);
         timerSpawn = Math.max(0.3, 1.1 - onda * 0.07) * (evento && evento.id === 'horda' ? 0.55 : 1);
       }
       if (!filaSpawn.length && vivos === 0) {
