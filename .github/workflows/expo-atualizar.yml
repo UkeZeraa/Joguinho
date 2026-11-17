@@ -1,0 +1,43 @@
+# Publica o jogo no Expo (EAS Update) sempre que algo do jogo muda no branch principal.
+# Os celulares com o APK recebem a versão nova sozinhos na próxima vez que abrirem o app com internet.
+# Precisa do segredo EXPO_TOKEN (Settings → Secrets and variables → Actions).
+name: Atualizar jogo no Expo
+
+on:
+  push:
+    branches: [claude/amazing-brown-wriftm]
+    paths: ['zumbi/**', 'zumbi-expo/**']
+  workflow_dispatch:
+
+concurrency:
+  group: expo-atualizar
+  cancel-in-progress: true
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zumbi-expo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: zumbi-expo/package-lock.json
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Ligar ao projeto do Expo (mesma conta do token)
+        run: |
+          eas init --non-interactive --force
+          eas update:configure --platform android --non-interactive
+      - name: Empacotar o jogo
+        run: npm run empacotar
+      - name: Publicar atualização
+        env:
+          MENSAGEM: ${{ github.event.head_commit.message || 'Atualização manual' }}
+        run: eas update --branch preview --platform android --message "$(printf '%s' "$MENSAGEM" | head -n1)" --non-interactive
